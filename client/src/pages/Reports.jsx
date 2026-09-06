@@ -30,8 +30,25 @@ function rangeFor(period) {
   if (period === "quarter") start.setMonth(now.getMonth() - 3);
   if (period === "6months") start.setMonth(now.getMonth() - 6);
   if (period === "year") start.setFullYear(now.getFullYear() - 1);
+  if (period === "2years") start.setFullYear(now.getFullYear() - 2);
+  if (period === "3years") start.setFullYear(now.getFullYear() - 3);
+  if (period === "5years") start.setFullYear(now.getFullYear() - 5);
   return { from: start.toISOString(), to: now.toISOString() };
 }
+
+// How many months of net-worth/income-vs-expense trend to pull alongside
+// each period — short periods just need recent context, multi-year ones
+// need a trend that actually spans what was picked.
+const TREND_MONTHS = {
+  week: 6,
+  month: 6,
+  quarter: 6,
+  "6months": 6,
+  year: 12,
+  "2years": 24,
+  "3years": 36,
+  "5years": 60,
+};
 
 const PERIODS = [
   { value: "week", label: "Last week" },
@@ -39,6 +56,9 @@ const PERIODS = [
   { value: "quarter", label: "3 months" },
   { value: "6months", label: "6 months" },
   { value: "year", label: "1 year" },
+  { value: "2years", label: "2 years" },
+  { value: "3years", label: "3 years" },
+  { value: "5years", label: "5 years" },
 ];
 
 export default function Reports() {
@@ -50,21 +70,25 @@ export default function Reports() {
   useEffect(() => {
     const { from, to } = rangeFor(period);
     api
-      .get("/transactions", { params: { from, to, limit: 2000 } })
+      .get("/transactions", { params: { from, to, limit: 10000 } })
       .then((res) => setTransactions(res.data.transactions));
   }, [period]);
 
   useEffect(() => {
-    api.get("/dashboard/networth-history", { params: { months: 6 } }).then((res) => {
+    const months = TREND_MONTHS[period] || 6;
+    api.get("/dashboard/networth-history", { params: { months } }).then((res) => {
       setNetWorthHistory(
         res.data.map((p, i, arr) => ({
-          label: i === arr.length - 1 ? "Today" : new Date(p.date).toLocaleDateString("en-PK", { month: "short" }),
+          label:
+            i === arr.length - 1
+              ? "Today"
+              : new Date(p.date).toLocaleDateString("en-PK", months > 12 ? { month: "short", year: "2-digit" } : { month: "short" }),
           netWorth: p.netWorth,
         }))
       );
     });
-    api.get("/dashboard/monthly-trend", { params: { months: 6 } }).then((res) => setMonthlyTrend(res.data));
-  }, []);
+    api.get("/dashboard/monthly-trend", { params: { months } }).then((res) => setMonthlyTrend(res.data));
+  }, [period]);
 
   const stats = useMemo(() => {
     const income = transactions.filter((t) => t.type === "INCOME").reduce((s, t) => s + t.amount, 0);
@@ -141,7 +165,13 @@ export default function Reports() {
                 </linearGradient>
               </defs>
               <CartesianGrid vertical={false} stroke="#E2E8F0" />
-              <XAxis dataKey="label" tick={{ fontSize: 11, fill: "#94A3B8" }} axisLine={false} tickLine={false} />
+              <XAxis
+                dataKey="label"
+                interval={Math.max(0, Math.ceil(netWorthHistory.length / 8) - 1)}
+                tick={{ fontSize: 11, fill: "#94A3B8" }}
+                axisLine={false}
+                tickLine={false}
+              />
               <YAxis tickFormatter={shortMoney} tick={{ fontSize: 11, fill: "#94A3B8" }} axisLine={false} tickLine={false} />
               <Tooltip formatter={(v) => money(v)} />
               <Area type="monotone" dataKey="netWorth" stroke="#4F46E5" strokeWidth={2} fill="url(#netWorthFill)" />
@@ -152,11 +182,19 @@ export default function Reports() {
 
       {monthlyTrend.length > 0 && (
         <div className="bg-surface border border-border shadow-card rounded-xl p-5">
-          <h2 className="text-sm font-semibold text-ink-muted mb-3">Income vs expense, last 6 months</h2>
+          <h2 className="text-sm font-semibold text-ink-muted mb-3">
+            Income vs expense, last {TREND_MONTHS[period] || 6} months
+          </h2>
           <ResponsiveContainer width="100%" height={220}>
             <BarChart data={monthlyTrend} margin={{ left: -20, right: 10 }}>
               <CartesianGrid vertical={false} stroke="#E2E8F0" />
-              <XAxis dataKey="label" tick={{ fontSize: 11, fill: "#94A3B8" }} axisLine={false} tickLine={false} />
+              <XAxis
+                dataKey="label"
+                interval={Math.max(0, Math.ceil(monthlyTrend.length / 8) - 1)}
+                tick={{ fontSize: 11, fill: "#94A3B8" }}
+                axisLine={false}
+                tickLine={false}
+              />
               <YAxis tickFormatter={shortMoney} tick={{ fontSize: 11, fill: "#94A3B8" }} axisLine={false} tickLine={false} />
               <Tooltip formatter={(v) => money(v)} />
               <Legend wrapperStyle={{ fontSize: 12 }} iconType="circle" iconSize={8} />

@@ -54,13 +54,13 @@ router.get("/summary", async (req, res) => {
 });
 
 router.get("/networth-history", async (req, res) => {
-  const months = Math.min(24, Math.max(1, Number(req.query.months) || 6));
+  const months = Math.min(60, Math.max(1, Number(req.query.months) || 6));
   const points = await getNetWorthHistory(req.userId, months);
   res.json(points);
 });
 
 router.get("/monthly-trend", async (req, res) => {
-  const months = Math.min(24, Math.max(1, Number(req.query.months) || 6));
+  const months = Math.min(60, Math.max(1, Number(req.query.months) || 6));
   const userId = new mongoose.Types.ObjectId(req.userId);
   const now = new Date();
   const start = new Date(now.getFullYear(), now.getMonth() - months + 1, 1);
@@ -82,7 +82,9 @@ router.get("/monthly-trend", async (req, res) => {
       rows.find((r) => r._id.year === d.getFullYear() && r._id.month === d.getMonth() + 1 && r._id.type === type)
         ?.total || 0;
     points.push({
-      label: d.toLocaleDateString("en-PK", { month: "short" }),
+      // Beyond a year, "Jan Feb Mar..." repeats every 12 points with no way
+      // to tell which year — add the year once ranges get that long.
+      label: d.toLocaleDateString("en-PK", months > 12 ? { month: "short", year: "2-digit" } : { month: "short" }),
       income: find("INCOME"),
       expense: find("EXPENSE"),
     });
