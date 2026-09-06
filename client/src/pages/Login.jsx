@@ -18,38 +18,43 @@ export default function Login() {
       await login(username, password);
       navigate("/");
     } catch {
-      setError("Galat username ya password");
+      setError("Incorrect username or password.");
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50 px-4">
-      <form onSubmit={handleSubmit} className="bg-white border border-slate-200 rounded-xl p-6 w-full max-w-sm">
-        <h1 className="text-xl font-semibold mb-1">Apna Hisab</h1>
-        <p className="text-sm text-slate-500 mb-5">Apna username aur password daalein</p>
+    <div className="min-h-screen flex items-center justify-center bg-canvas px-4">
+      <form onSubmit={handleSubmit} className="bg-surface border border-border shadow-card rounded-2xl p-8 w-full max-w-sm">
+        <div className="w-10 h-10 rounded-lg bg-accent flex items-center justify-center text-white font-bold mb-4">
+          AH
+        </div>
+        <h1 className="text-xl font-bold tracking-tight">Apna Hisab</h1>
+        <p className="text-sm text-ink-muted mt-1 mb-6">Sign in to see your money, clearly.</p>
+        <label className="block text-xs font-semibold text-ink-muted uppercase tracking-wide mb-1.5">Username</label>
         <input
           type="text"
-          placeholder="Username"
           value={username}
           onChange={(e) => setUsername(e.target.value)}
-          className="w-full border border-slate-200 rounded-lg px-3 py-2 mb-3"
+          className="w-full border border-border rounded-lg px-3.5 py-2.5 mb-4 outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent transition-shadow"
+          autoComplete="username"
         />
+        <label className="block text-xs font-semibold text-ink-muted uppercase tracking-wide mb-1.5">Password</label>
         <input
           type="password"
-          placeholder="Password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          className="w-full border border-slate-200 rounded-lg px-3 py-2 mb-3"
+          className="w-full border border-border rounded-lg px-3.5 py-2.5 mb-5 outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent transition-shadow"
+          autoComplete="current-password"
         />
-        {error && <p className="text-sm text-bad mb-3">{error}</p>}
+        {error && <p className="text-sm text-bad mb-4">{error}</p>}
         <button
           type="submit"
           disabled={loading}
-          className="w-full bg-accent text-white font-medium py-2.5 rounded-lg disabled:opacity-50"
+          className="w-full bg-accent hover:bg-accent-ink text-white font-semibold py-2.5 rounded-lg transition-colors disabled:opacity-50"
         >
-          {loading ? "Logging in..." : "Login"}
+          {loading ? "Signing in…" : "Sign in"}
         </button>
       </form>
     </div>

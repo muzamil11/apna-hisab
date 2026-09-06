@@ -15,11 +15,11 @@ function rangeFor(period) {
 }
 
 const PERIODS = [
-  { value: "week", label: "Pichla hafta" },
-  { value: "month", label: "Pichla mahina" },
-  { value: "quarter", label: "3 mahine" },
-  { value: "6months", label: "6 mahine" },
-  { value: "year", label: "1 saal" },
+  { value: "week", label: "Last week" },
+  { value: "month", label: "Last month" },
+  { value: "quarter", label: "3 months" },
+  { value: "6months", label: "6 months" },
+  { value: "year", label: "1 year" },
 ];
 
 export default function Reports() {
@@ -28,7 +28,9 @@ export default function Reports() {
 
   useEffect(() => {
     const { from, to } = rangeFor(period);
-    api.get("/transactions", { params: { from, to, limit: 2000 } }).then((res) => setTransactions(res.data));
+    api
+      .get("/transactions", { params: { from, to, limit: 2000 } })
+      .then((res) => setTransactions(res.data.transactions));
   }, [period]);
 
   const stats = useMemo(() => {
@@ -49,50 +51,54 @@ export default function Reports() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <h1 className="text-2xl font-semibold">Reports</h1>
-        <div className="flex gap-1">
-          {PERIODS.map((p) => (
-            <button
-              key={p.value}
-              onClick={() => setPeriod(p.value)}
-              className={`px-3 py-1.5 text-sm rounded-lg border ${
-                period === p.value ? "border-accent text-accent bg-blue-50" : "border-slate-200 text-slate-500"
-              }`}
-            >
-              {p.label}
-            </button>
-          ))}
-        </div>
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight">Reports</h1>
+        <p className="text-sm text-ink-muted mt-0.5">See how money moved over a period.</p>
+      </div>
+
+      <div className="flex gap-1.5 overflow-x-auto pb-1">
+        {PERIODS.map((p) => (
+          <button
+            key={p.value}
+            onClick={() => setPeriod(p.value)}
+            className={`px-3.5 py-1.5 text-sm font-medium rounded-full border whitespace-nowrap transition-colors ${
+              period === p.value ? "border-accent bg-accent-soft text-accent-ink" : "border-border text-ink-muted"
+            }`}
+          >
+            {p.label}
+          </button>
+        ))}
       </div>
 
       <div className="grid grid-cols-3 gap-3">
-        <div className="bg-white border border-slate-200 rounded-xl p-4">
-          <div className="text-xs uppercase text-slate-400 mb-1">Aamdani</div>
-          <div className="text-xl font-semibold tabular-nums text-good">{money(stats.income)}</div>
+        <div className="bg-surface border border-border shadow-card rounded-xl p-4">
+          <div className="text-xs uppercase text-ink-faint font-semibold mb-1">Income</div>
+          <div className="text-lg md:text-xl font-bold tabular-nums text-good">{money(stats.income)}</div>
         </div>
-        <div className="bg-white border border-slate-200 rounded-xl p-4">
-          <div className="text-xs uppercase text-slate-400 mb-1">Kharcha</div>
-          <div className="text-xl font-semibold tabular-nums text-bad">{money(stats.expense)}</div>
+        <div className="bg-surface border border-border shadow-card rounded-xl p-4">
+          <div className="text-xs uppercase text-ink-faint font-semibold mb-1">Expense</div>
+          <div className="text-lg md:text-xl font-bold tabular-nums text-bad">{money(stats.expense)}</div>
         </div>
-        <div className="bg-white border border-slate-200 rounded-xl p-4">
-          <div className="text-xs uppercase text-slate-400 mb-1">Bachat</div>
-          <div className={`text-xl font-semibold tabular-nums ${stats.saved >= 0 ? "text-good" : "text-bad"}`}>
+        <div className="bg-surface border border-border shadow-card rounded-xl p-4">
+          <div className="text-xs uppercase text-ink-faint font-semibold mb-1">Saved</div>
+          <div className={`text-lg md:text-xl font-bold tabular-nums ${stats.saved >= 0 ? "text-good" : "text-bad"}`}>
             {money(stats.saved)}
           </div>
         </div>
       </div>
 
-      <div className="bg-white border border-slate-200 rounded-xl p-4">
-        <h2 className="text-sm font-medium text-slate-500 mb-3">Category-wise kharcha</h2>
-        <div className="divide-y divide-slate-100">
+      <div className="bg-surface border border-border shadow-card rounded-xl p-5">
+        <h2 className="text-sm font-semibold text-ink-muted mb-3">Spending by category</h2>
+        <div className="divide-y divide-border">
           {stats.byCategory.map(([name, total]) => (
-            <div key={name} className="flex justify-between py-2 text-sm">
-              <span>{name}</span>
-              <span className="font-medium tabular-nums">{money(total)}</span>
+            <div key={name} className="flex justify-between py-2.5 text-sm">
+              <span className="font-medium">{name}</span>
+              <span className="font-bold tabular-nums">{money(total)}</span>
             </div>
           ))}
-          {stats.byCategory.length === 0 && <p className="text-sm text-slate-400 py-2">Is period mein data nahi</p>}
+          {stats.byCategory.length === 0 && (
+            <p className="text-sm text-ink-faint py-4 text-center">No data for this period.</p>
+          )}
         </div>
       </div>
     </div>

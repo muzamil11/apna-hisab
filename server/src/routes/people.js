@@ -21,11 +21,11 @@ router.post("/", async (req, res) => {
   const { name, note } = req.body;
   const person = await Person.create({ user: req.userId, name, note });
 
-  // Every person automatically gets a receivable + payable ledger so "diya"
-  // and "liya" can be recorded the moment they're added, no extra setup step.
+  // Every person automatically gets a receivable + payable ledger so lending
+  // or borrowing can be recorded the moment they're added, no extra setup step.
   const [receivable, payable] = await Account.create([
-    { user: req.userId, name: `${name} — udhar diya`, type: "RECEIVABLE", person: person._id },
-    { user: req.userId, name: `${name} — udhar liya`, type: "PAYABLE", person: person._id },
+    { user: req.userId, name: `${name} owes you`, type: "RECEIVABLE", person: person._id },
+    { user: req.userId, name: `You owe ${name}`, type: "PAYABLE", person: person._id },
   ]);
 
   res.status(201).json({ person, receivable, payable });

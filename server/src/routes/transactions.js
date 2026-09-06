@@ -19,18 +19,24 @@ async function assertOwnedAccounts(userId, ids) {
 }
 
 router.get("/", async (req, res) => {
-  const { from, to, limit = 200 } = req.query;
+  const { from, to, limit = 200, skip = 0, person } = req.query;
   const query = { user: req.userId };
   if (from || to) {
     query.date = {};
     if (from) query.date.$gte = new Date(from);
     if (to) query.date.$lte = new Date(to);
   }
-  const transactions = await Transaction.find(query)
-    .sort({ date: -1 })
-    .limit(Number(limit))
-    .populate("category person fromAccount toAccount");
-  res.json(transactions);
+  if (person) query.person = person;
+
+  const [transactions, total] = await Promise.all([
+    Transaction.find(query)
+      .sort({ date: -1 })
+      .skip(Number(skip))
+      .limit(Number(limit))
+      .populate("category person fromAccount toAccount"),
+    Transaction.countDocuments(query),
+  ]);
+  res.json({ transactions, total });
 });
 
 router.post("/", async (req, res) => {

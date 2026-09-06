@@ -1,7 +1,8 @@
 import { Router } from "express";
 import Account from "../models/Account.js";
+import Transaction from "../models/Transaction.js";
 import { requireAuth } from "../middleware/auth.js";
-import { getNetWorth, recomputeAccountBalance } from "../utils/ledger.js";
+import { getNetWorth, recomputeAccountBalance, applyTransactionEffects } from "../utils/ledger.js";
 
 const router = Router();
 router.use(requireAuth);
@@ -12,9 +13,26 @@ router.get("/", async (req, res) => {
 });
 
 router.post("/", async (req, res) => {
-  const { name, type, person, meta } = req.body;
+  const { name, type, person, meta, startingBalance } = req.body;
   const account = await Account.create({ user: req.userId, name, type, person, meta });
-  res.status(201).json(account);
+
+  // A starting balance is recorded as a real transaction (not a raw balance
+  // write) so it stays consistent with recomputeAccountBalance and shows up
+  // in history — an asset account "receives" it, a liability "owes" it already.
+  const amount = Number(startingBalance);
+  if (amount) {
+    const tx = await Transaction.create({
+      user: req.userId,
+      type: account.kind === "LIABILITY" ? "EXPENSE" : "INCOME",
+      amount: Math.abs(amount),
+      title: "Starting balance",
+      toAccount: account.kind === "LIABILITY" ? undefined : account._id,
+      fromAccount: account.kind === "LIABILITY" ? account._id : undefined,
+    });
+    await applyTransactionEffects(tx);
+  }
+
+  res.status(201).json(await Account.findById(account._id));
 });
 
 router.patch("/:id/archive", async (req, res) => {

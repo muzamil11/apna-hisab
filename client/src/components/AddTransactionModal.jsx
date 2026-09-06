@@ -1,10 +1,17 @@
 import { useState } from "react";
+import { TrendingUp, TrendingDown, ArrowLeftRight, X } from "lucide-react";
 import api from "../api/client.js";
 
-const TYPE_LABELS = {
-  INCOME: { label: "💰 Aamdani", hint: "Bahar se paisa aaya — salary, rent, freelance" },
-  EXPENSE: { label: "💸 Kharcha", hint: "Paisa system se bahar gaya — khana, bill, shopping" },
-  TRANSFER: { label: "🔁 Transfer", hint: "Apni hi jagah paisa gaya — investment, committee, udhar" },
+const TYPES = [
+  { key: "INCOME", label: "Income", hint: "Money came in — salary, rent, freelance", icon: TrendingUp, tone: "good" },
+  { key: "EXPENSE", label: "Expense", hint: "Money left for good — food, bills, shopping", icon: TrendingDown, tone: "bad" },
+  { key: "TRANSFER", label: "Transfer", hint: "Moved between your own accounts — investing, lending, committee", icon: ArrowLeftRight, tone: "accent" },
+];
+
+const toneClasses = {
+  good: "border-good bg-good-soft text-good",
+  bad: "border-bad bg-bad-soft text-bad",
+  accent: "border-accent bg-accent-soft text-accent-ink",
 };
 
 export default function AddTransactionModal({ accounts, categories, people, onClose, onCreated }) {
@@ -21,14 +28,15 @@ export default function AddTransactionModal({ accounts, categories, people, onCl
   const [error, setError] = useState("");
 
   const relevantCategories = categories.filter((c) => c.direction === (type === "INCOME" ? "INCOME" : "EXPENSE"));
+  const active = TYPES.find((t) => t.key === type);
 
   async function handleSubmit(e) {
     e.preventDefault();
     setError("");
-    if (!amount || !title) return setError("Amount aur title zaroori hain");
-    if (type !== "TRANSFER" && !category) return setError("Category chunein");
-    if ((type === "EXPENSE" || type === "TRANSFER") && !fromAccount) return setError("Konse account se? chunein");
-    if ((type === "INCOME" || type === "TRANSFER") && !toAccount) return setError("Kahan gaya? chunein");
+    if (!amount || !title) return setError("Amount and title are required.");
+    if (type !== "TRANSFER" && !category) return setError("Please choose a category.");
+    if ((type === "EXPENSE" || type === "TRANSFER") && !fromAccount) return setError("Choose which account this came from.");
+    if ((type === "INCOME" || type === "TRANSFER") && !toAccount) return setError("Choose where this went.");
 
     setSaving(true);
     try {
@@ -46,61 +54,62 @@ export default function AddTransactionModal({ accounts, categories, people, onCl
       onCreated();
       onClose();
     } catch (err) {
-      setError(err.response?.data?.error || "Save nahi ho saka");
+      setError(err.response?.data?.error || "Could not save this transaction.");
     } finally {
       setSaving(false);
     }
   }
 
+  const inputClass =
+    "w-full border border-border rounded-lg px-3.5 py-2.5 outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent transition-shadow bg-surface";
+
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-end md:items-center justify-center z-50">
-      <div className="bg-white w-full md:max-w-md md:rounded-xl rounded-t-2xl p-5 max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold">Add Transaction</h2>
-          <button onClick={onClose} className="text-slate-400 hover:text-ink text-xl leading-none">
-            ×
+    <div className="fixed inset-0 bg-ink/40 flex items-end md:items-center justify-center z-50 p-0 md:p-4">
+      <div className="bg-surface w-full md:max-w-md md:rounded-2xl rounded-t-2xl p-6 max-h-[92vh] overflow-y-auto">
+        <div className="flex items-center justify-between mb-5">
+          <h2 className="text-lg font-bold tracking-tight">Add Transaction</h2>
+          <button onClick={onClose} aria-label="Close" className="text-ink-faint hover:text-ink transition-colors">
+            <X size={20} />
           </button>
         </div>
 
-        <div className="grid grid-cols-3 gap-2 mb-4">
-          {Object.entries(TYPE_LABELS).map(([key, { label }]) => (
+        <div className="grid grid-cols-3 gap-2 mb-2">
+          {TYPES.map((t) => (
             <button
-              key={key}
+              key={t.key}
               type="button"
-              onClick={() => setType(key)}
-              className={`py-2 rounded-lg text-sm font-medium border ${
-                type === key ? "border-accent bg-blue-50 text-accent" : "border-slate-200 text-slate-500"
+              onClick={() => setType(t.key)}
+              className={`flex flex-col items-center gap-1.5 py-3 rounded-xl border text-xs font-semibold transition-colors ${
+                type === t.key ? toneClasses[t.tone] : "border-border text-ink-muted hover:border-ink-faint"
               }`}
             >
-              {label}
+              <t.icon size={18} strokeWidth={2} />
+              {t.label}
             </button>
           ))}
         </div>
-        <p className="text-xs text-slate-400 mb-4">{TYPE_LABELS[type].hint}</p>
+        <p className="text-xs text-ink-faint mb-5">{active.hint}</p>
 
-        <form onSubmit={handleSubmit} className="space-y-3">
+        <form onSubmit={handleSubmit} className="space-y-3.5">
           <input
             type="number"
-            placeholder="Amount"
+            inputMode="decimal"
+            placeholder="0"
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
-            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-lg font-semibold tabular-nums"
+            className={`${inputClass} text-2xl font-bold tabular-nums`}
           />
           <input
             type="text"
-            placeholder="Title — e.g. Uni trip, Salary Sept"
+            placeholder="Title — e.g. Grocery run, Salary for September"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            className="w-full border border-slate-200 rounded-lg px-3 py-2"
+            className={inputClass}
           />
 
           {(type === "EXPENSE" || type === "TRANSFER") && (
-            <select
-              value={fromAccount}
-              onChange={(e) => setFromAccount(e.target.value)}
-              className="w-full border border-slate-200 rounded-lg px-3 py-2"
-            >
-              <option value="">Konse account se?</option>
+            <select value={fromAccount} onChange={(e) => setFromAccount(e.target.value)} className={inputClass}>
+              <option value="">From which account?</option>
               {accounts.map((a) => (
                 <option key={a._id} value={a._id}>
                   {a.name}
@@ -110,12 +119,8 @@ export default function AddTransactionModal({ accounts, categories, people, onCl
           )}
 
           {(type === "INCOME" || type === "TRANSFER") && (
-            <select
-              value={toAccount}
-              onChange={(e) => setToAccount(e.target.value)}
-              className="w-full border border-slate-200 rounded-lg px-3 py-2"
-            >
-              <option value="">Kahan gaya / kahan aaya?</option>
+            <select value={toAccount} onChange={(e) => setToAccount(e.target.value)} className={inputClass}>
+              <option value="">Into which account?</option>
               {accounts.map((a) => (
                 <option key={a._id} value={a._id}>
                   {a.name}
@@ -125,11 +130,7 @@ export default function AddTransactionModal({ accounts, categories, people, onCl
           )}
 
           {type !== "TRANSFER" && (
-            <select
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-              className="w-full border border-slate-200 rounded-lg px-3 py-2"
-            >
+            <select value={category} onChange={(e) => setCategory(e.target.value)} className={inputClass}>
               <option value="">Category</option>
               {relevantCategories.map((c) => (
                 <option key={c._id} value={c._id}>
@@ -140,31 +141,22 @@ export default function AddTransactionModal({ accounts, categories, people, onCl
           )}
 
           {type === "EXPENSE" && people.length > 0 && (
-            <select
-              value={person}
-              onChange={(e) => setPerson(e.target.value)}
-              className="w-full border border-slate-200 rounded-lg px-3 py-2"
-            >
-              <option value="">Khud pe (default) — ya kisi aur pe?</option>
+            <select value={person} onChange={(e) => setPerson(e.target.value)} className={inputClass}>
+              <option value="">Spent on yourself (default)</option>
               {people.map((p) => (
                 <option key={p._id} value={p._id}>
-                  {p.name}
+                  Spent on {p.name}
                 </option>
               ))}
             </select>
           )}
 
-          <input
-            type="date"
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-            className="w-full border border-slate-200 rounded-lg px-3 py-2"
-          />
+          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={inputClass} />
           <textarea
-            placeholder="Note (optional, detail yahan likhein)"
+            placeholder="Note (optional)"
             value={note}
             onChange={(e) => setNote(e.target.value)}
-            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
+            className={`${inputClass} text-sm`}
             rows={2}
           />
 
@@ -173,9 +165,9 @@ export default function AddTransactionModal({ accounts, categories, people, onCl
           <button
             type="submit"
             disabled={saving}
-            className="w-full bg-accent text-white font-medium py-2.5 rounded-lg disabled:opacity-50"
+            className="w-full bg-accent hover:bg-accent-ink text-white font-semibold py-3 rounded-lg transition-colors disabled:opacity-50"
           >
-            {saving ? "Saving..." : "Save"}
+            {saving ? "Saving…" : "Save"}
           </button>
         </form>
       </div>

@@ -9,10 +9,10 @@ const router = Router();
 router.post("/login", async (req, res) => {
   const { username, password } = req.body;
   const user = await User.findOne({ username: username?.toLowerCase().trim() });
-  if (!user) return res.status(401).json({ error: "Galat username ya password" });
+  if (!user) return res.status(401).json({ error: "Incorrect username or password" });
 
   const valid = await bcrypt.compare(password || "", user.passwordHash);
-  if (!valid) return res.status(401).json({ error: "Galat username ya password" });
+  if (!valid) return res.status(401).json({ error: "Incorrect username or password" });
 
   const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, { expiresIn: "30d" });
   res.json({

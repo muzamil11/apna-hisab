@@ -1,4 +1,4 @@
-export default function StatCard({ label, value, tone = "default" }) {
+export default function StatCard({ label, value, tone = "default", icon: Icon }) {
   const toneClass = {
     default: "text-ink",
     good: "text-good",
@@ -7,9 +7,12 @@ export default function StatCard({ label, value, tone = "default" }) {
   }[tone];
 
   return (
-    <div className="bg-white border border-slate-200 rounded-xl p-4">
-      <div className="text-xs uppercase tracking-wide text-slate-400 font-medium mb-1">{label}</div>
-      <div className={`text-2xl font-semibold tabular-nums ${toneClass}`}>{value}</div>
+    <div className="bg-surface border border-border shadow-card rounded-xl p-4">
+      <div className="flex items-center justify-between mb-1.5">
+        <span className="text-xs uppercase tracking-wide text-ink-faint font-semibold">{label}</span>
+        {Icon && <Icon size={15} className="text-ink-faint" strokeWidth={2} />}
+      </div>
+      <div className={`text-2xl font-bold tabular-nums ${toneClass}`}>{value}</div>
     </div>
   );
 }

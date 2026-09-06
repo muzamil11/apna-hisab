@@ -22,7 +22,7 @@ app.use("/api/dashboard", dashboardRoutes);
 
 app.use((err, req, res, next) => {
   console.error(err);
-  res.status(500).json({ error: "Kuch ghalat ho gaya, dobara koshish karein" });
+  res.status(500).json({ error: "Something went wrong, please try again" });
 });
 
 export default app;

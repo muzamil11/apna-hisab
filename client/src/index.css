@@ -3,5 +3,10 @@
 @tailwind utilities;
 
 body {
-  @apply bg-slate-50 text-ink;
+  @apply bg-canvas text-ink antialiased;
+  font-feature-settings: "tnum" 1;
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
 }

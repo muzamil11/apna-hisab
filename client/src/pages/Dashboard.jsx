@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
+import { Plus, Wallet, TrendingUp, TrendingDown, PiggyBank, AlertTriangle } from "lucide-react";
 import api from "../api/client.js";
 import StatCard from "../components/StatCard.jsx";
 import AddTransactionModal from "../components/AddTransactionModal.jsx";
 
-const COLORS = ["#2B5CE7", "#1F9D6C", "#C68A15", "#D6432E", "#7C3AED", "#0891B2", "#DB2777"];
+const COLORS = ["#4F46E5", "#16A34A", "#D97706", "#DC2626", "#7C3AED", "#0891B2", "#DB2777"];
 
 const money = (n) => `Rs ${Math.round(n).toLocaleString("en-PK")}`;
 
@@ -32,25 +33,34 @@ export default function Dashboard() {
     loadAll();
   }, []);
 
-  if (!summary) return <p className="text-slate-400">Loading...</p>;
+  if (!summary) return <p className="text-ink-faint">Loading…</p>;
+
+  const walletAccounts = accounts.filter((a) => !["RECEIVABLE", "PAYABLE"].includes(a.type));
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Dashboard</h1>
-        <button onClick={() => setShowAdd(true)} className="bg-accent text-white px-4 py-2 rounded-lg font-medium">
-          + Add
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
+          <p className="text-sm text-ink-muted mt-0.5">Your money, at a glance.</p>
+        </div>
+        <button
+          onClick={() => setShowAdd(true)}
+          className="hidden md:flex items-center gap-1.5 bg-accent hover:bg-accent-ink text-white px-4 py-2.5 rounded-lg font-semibold text-sm transition-colors"
+        >
+          <Plus size={16} strokeWidth={2.5} /> Add
         </button>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <StatCard label="Net Worth" value={money(summary.netWorth)} />
-        <StatCard label="Is mahine aamdani" value={money(summary.month.income)} tone="good" />
-        <StatCard label="Is mahine kharcha" value={money(summary.month.expense)} tone="bad" />
+        <StatCard label="Net Worth" value={money(summary.netWorth)} icon={Wallet} />
+        <StatCard label="Income this month" value={money(summary.month.income)} tone="good" icon={TrendingUp} />
+        <StatCard label="Spent this month" value={money(summary.month.expense)} tone="bad" icon={TrendingDown} />
         <StatCard
-          label="Is mahine bachat"
+          label="Saved this month"
           value={money(summary.month.saved)}
           tone={summary.month.saved >= 0 ? "good" : "bad"}
+          icon={PiggyBank}
         />
       </div>
 
@@ -61,20 +71,21 @@ export default function Dashboard() {
             .map((b, i) => (
               <div
                 key={i}
-                className={`rounded-lg px-4 py-3 text-sm ${
-                  b.level === "red" ? "bg-red-50 text-bad" : "bg-amber-50 text-warn"
+                className={`flex items-center gap-2.5 rounded-lg px-4 py-3 text-sm font-medium ${
+                  b.level === "red" ? "bg-bad-soft text-bad" : "bg-warn-soft text-warn"
                 }`}
               >
-                {b.exceeded && `${b.budget.category?.name || "Budget"} ka limit cross ho gaya`}
-                {b.missed && `Is mahine savings goal (${money(b.budget.limitAmount)}) miss ho gaya`}
+                <AlertTriangle size={16} strokeWidth={2} className="shrink-0" />
+                {b.exceeded && `You've gone over your ${b.budget.category?.name || "budget"} limit this month.`}
+                {b.missed && `You're below your ${money(b.budget.limitAmount)} savings goal this month.`}
               </div>
             ))}
         </div>
       )}
 
       {summary.byCategory.length > 0 && (
-        <div className="bg-white border border-slate-200 rounded-xl p-4">
-          <h2 className="text-sm font-medium text-slate-500 mb-3">Is mahine kharcha — category wise</h2>
+        <div className="bg-surface border border-border shadow-card rounded-xl p-5">
+          <h2 className="text-sm font-semibold text-ink-muted mb-3">Spending by category this month</h2>
           <ResponsiveContainer width="100%" height={240}>
             <PieChart>
               <Pie data={summary.byCategory} dataKey="total" nameKey="category" outerRadius={90} label>
@@ -88,14 +99,14 @@ export default function Dashboard() {
         </div>
       )}
 
-      <div className="bg-white border border-slate-200 rounded-xl p-4">
-        <h2 className="text-sm font-medium text-slate-500 mb-3">Accounts</h2>
+      <div className="bg-surface border border-border shadow-card rounded-xl p-5">
+        <h2 className="text-sm font-semibold text-ink-muted mb-3">Accounts</h2>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-          {accounts.map((a) => (
-            <div key={a._id} className="border border-slate-100 rounded-lg p-3">
-              <div className="text-xs text-slate-400">{a.type.replace("_", " ")}</div>
-              <div className="text-sm font-medium">{a.name}</div>
-              <div className={`tabular-nums font-semibold ${a.kind === "LIABILITY" ? "text-bad" : "text-ink"}`}>
+          {walletAccounts.map((a) => (
+            <div key={a._id} className="border border-border rounded-lg p-3">
+              <div className="text-xs text-ink-faint font-medium">{a.type.replace("_", " ")}</div>
+              <div className="text-sm font-semibold mt-0.5">{a.name}</div>
+              <div className={`tabular-nums font-bold mt-1 ${a.kind === "LIABILITY" ? "text-bad" : "text-ink"}`}>
                 {money(a.balance)}
               </div>
             </div>
@@ -103,9 +114,17 @@ export default function Dashboard() {
         </div>
       </div>
 
+      <button
+        onClick={() => setShowAdd(true)}
+        className="md:hidden fixed bottom-20 right-4 z-20 w-14 h-14 rounded-full bg-accent hover:bg-accent-ink text-white shadow-lg flex items-center justify-center"
+        aria-label="Add transaction"
+      >
+        <Plus size={26} strokeWidth={2.5} />
+      </button>
+
       {showAdd && (
         <AddTransactionModal
-          accounts={accounts}
+          accounts={walletAccounts}
           categories={categories}
           people={people}
           onClose={() => setShowAdd(false)}
