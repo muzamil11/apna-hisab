@@ -283,35 +283,11 @@ export default function Accounts() {
             ))}
           </select>
         </div>
-        {type === "CREDIT_CARD" && (
-          <div className="flex flex-wrap gap-3">
-            <input
-              type="number"
-              min="1"
-              max="31"
-              placeholder="Billing date (day of month, e.g. 20)"
-              value={billingCycleDay}
-              onChange={(e) => setBillingCycleDay(e.target.value)}
-              className={`${inputClass} flex-1 min-w-[180px]`}
-            />
-            <input
-              type="number"
-              min="1"
-              max="31"
-              placeholder="Due date (day of month, e.g. 9)"
-              value={dueDay}
-              onChange={(e) => setDueDay(e.target.value)}
-              className={`${inputClass} flex-1 min-w-[180px]`}
-            />
-            <input
-              type="number"
-              placeholder="Credit limit — e.g. 170000"
-              value={creditLimit}
-              onChange={(e) => setCreditLimit(e.target.value)}
-              className={`${inputClass} flex-1 min-w-[180px]`}
-            />
-          </div>
-        )}
+        {/* Billing cycle / due date / credit limit — paused for now, we're
+            tracking cards as a plain liability (Expense + Transfer) until
+            we build the cycle math back up together, deliberately, with
+            real usage to test against. Backend (creditCard.js, the
+            /statements route, its tests) is untouched and ready when we do. */}
         {type === "GOAL" && (
           <div className="flex flex-wrap gap-3">
             <input
@@ -397,7 +373,10 @@ export default function Accounts() {
                   </div>
                 )}
 
-                {a.cardSummary && (
+                {/* Cycle/due-date/statement UI paused too — see note above.
+                    Cards behave like any other liability account for now:
+                    Expense to spend on it, Transfer to pay it down. */}
+                {false && a.cardSummary && (
                   <div className="mt-3 pt-3 border-t border-border space-y-2">
                     {a.cardSummary.creditLimit && (
                       <div className="space-y-1">
