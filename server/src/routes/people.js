@@ -1,6 +1,7 @@
 import { Router } from "express";
 import Person from "../models/Person.js";
 import Account from "../models/Account.js";
+import Transaction from "../models/Transaction.js";
 import { requireAuth } from "../middleware/auth.js";
 
 const router = Router();
@@ -29,6 +30,23 @@ router.post("/", async (req, res) => {
   ]);
 
   res.status(201).json({ person, receivable, payable });
+});
+
+// Only removable once fully settled — otherwise a real debt could silently
+// vanish from net worth instead of being repaid or forgiven on purpose.
+router.delete("/:id", async (req, res) => {
+  const person = await Person.findOne({ _id: req.params.id, user: req.userId });
+  if (!person) return res.status(404).json({ error: "Person not found" });
+
+  const accounts = await Account.find({ user: req.userId, person: person._id });
+  if (accounts.some((a) => a.balance !== 0)) {
+    return res.status(400).json({ error: "Settle their balance to zero before removing them." });
+  }
+
+  await Transaction.deleteMany({ user: req.userId, person: person._id });
+  await Account.deleteMany({ _id: { $in: accounts.map((a) => a._id) } });
+  await person.deleteOne();
+  res.json({ ok: true });
 });
 
 export default router;

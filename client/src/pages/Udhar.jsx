@@ -305,6 +305,16 @@ export default function Udhar() {
     load();
   }
 
+  async function handleRemovePerson(person) {
+    if (!window.confirm(`Remove ${person.name}? This only works if their balance is fully settled.`)) return;
+    try {
+      await api.delete(`/people/${person._id}`);
+      load();
+    } catch (err) {
+      alert(err.response?.data?.error || "Could not remove this person.");
+    }
+  }
+
   const cashAccounts = accounts.filter((a) => a.type === "BANK" || a.type === "CASH");
   const inputClass =
     "border border-border rounded-lg px-3.5 py-2.5 outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent transition-shadow bg-surface";
@@ -388,7 +398,7 @@ export default function Udhar() {
               >
                 <div className="flex items-center justify-between mb-3">
                   <span className="font-bold">{p.name}</span>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-3">
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
@@ -397,6 +407,16 @@ export default function Udhar() {
                       className="flex items-center gap-1 text-sm text-accent-ink font-semibold"
                     >
                       <Plus size={15} strokeWidth={2.5} /> Entry
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleRemovePerson(p);
+                      }}
+                      aria-label={`Remove ${p.name}`}
+                      className="text-ink-faint hover:text-bad"
+                    >
+                      <Trash2 size={15} />
                     </button>
                     <ChevronDown
                       size={18}
