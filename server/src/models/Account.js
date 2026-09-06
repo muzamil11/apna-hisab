@@ -31,6 +31,7 @@ const accountSchema = new mongoose.Schema(
       payoutMonth: Date, // COMMITTEE
       targetAmount: Number, // GOAL
       targetDate: Date, // GOAL
+      investedAmount: Number, // INVESTMENT — cost basis, so profit/loss % can be shown against current balance
     },
     archived: { type: Boolean, default: false },
   },

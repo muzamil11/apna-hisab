@@ -8,17 +8,34 @@ import { getCardSummary, getStatementHistory } from "../utils/creditCard.js";
 const router = Router();
 router.use(requireAuth);
 
+async function withSummary(account) {
+  if (account.type === "CREDIT_CARD") {
+    const cardSummary = await getCardSummary(Transaction, account);
+    return { ...account.toObject(), cardSummary };
+  }
+  if (account.type === "INVESTMENT" && account.meta?.investedAmount) {
+    // Current balance alone understates profit once money has actually been
+    // withdrawn/received from an investment (e.g. it matured and paid out)
+    // — total return has to include what already left too, not just what's
+    // still sitting in the account.
+    const [{ total: withdrawn = 0 } = {}] = await Transaction.aggregate([
+      { $match: { fromAccount: account._id } },
+      { $group: { _id: null, total: { $sum: "$amount" } } },
+    ]);
+    const invested = account.meta.investedAmount;
+    const totalValue = account.balance + withdrawn;
+    const profit = totalValue - invested;
+    return {
+      ...account.toObject(),
+      investmentSummary: { invested, withdrawn, totalValue, profit, profitPct: invested ? (profit / invested) * 100 : null },
+    };
+  }
+  return account.toObject();
+}
+
 router.get("/", async (req, res) => {
   const { netWorth, accounts } = await getNetWorth(req.userId);
-
-  const withSummaries = await Promise.all(
-    accounts.map(async (account) => {
-      if (account.type !== "CREDIT_CARD") return account.toObject();
-      const cardSummary = await getCardSummary(Transaction, account);
-      return { ...account.toObject(), cardSummary };
-    })
-  );
-
+  const withSummaries = await Promise.all(accounts.map(withSummary));
   res.json({ netWorth, accounts: withSummaries });
 });
 
@@ -45,22 +62,24 @@ router.post("/", async (req, res) => {
   res.status(201).json(await Account.findById(account._id));
 });
 
-// Rename only — type/kind aren't editable since they'd change how the
-// polarity math already applied to past transactions should be read.
+// Name and invested-amount (cost basis, for showing profit/loss % on
+// INVESTMENT accounts) only — type/kind aren't editable since they'd change
+// how the polarity math already applied to past transactions should be read.
 router.patch("/:id", async (req, res) => {
-  const { name } = req.body;
-  const account = await Account.findOneAndUpdate(
-    { _id: req.params.id, user: req.userId },
-    { name },
-    { new: true }
-  );
+  const { name, investedAmount } = req.body;
+  const update = {};
+  if (name !== undefined) update.name = name;
+  if (investedAmount !== undefined) update["meta.investedAmount"] = investedAmount === null ? null : Number(investedAmount);
+
+  const account = await Account.findOneAndUpdate({ _id: req.params.id, user: req.userId }, update, { new: true });
   if (!account) return res.status(404).json({ error: "Account not found" });
   res.json(account);
 });
 
 router.get("/archived", async (req, res) => {
   const accounts = await Account.find({ user: req.userId, archived: true }).sort({ updatedAt: -1 });
-  res.json(accounts);
+  const withSummaries = await Promise.all(accounts.map(withSummary));
+  res.json(withSummaries);
 });
 
 router.patch("/:id/archive", async (req, res) => {

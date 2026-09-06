@@ -84,10 +84,17 @@ export default function Reports() {
     };
   }, [transactions]);
 
-  const netWorthDelta =
-    netWorthHistory.length >= 2
-      ? netWorthHistory[netWorthHistory.length - 1].netWorth - netWorthHistory[netWorthHistory.length - 2].netWorth
-      : null;
+  function changeVs(pointsAgo) {
+    if (netWorthHistory.length <= pointsAgo) return { amount: null, pct: null };
+    const latest = netWorthHistory[netWorthHistory.length - 1].netWorth;
+    const past = netWorthHistory[netWorthHistory.length - 1 - pointsAgo].netWorth;
+    const amount = latest - past;
+    const pct = past !== 0 ? (amount / Math.abs(past)) * 100 : null;
+    return { amount, pct };
+  }
+
+  const vsLastMonth = changeVs(1);
+  const vs3Months = changeVs(3);
 
   const categoryChartHeight = Math.max(120, stats.byCategory.length * 36);
 
@@ -100,16 +107,30 @@ export default function Reports() {
 
       {netWorthHistory.length > 0 && (
         <div className="bg-surface border border-border shadow-card rounded-xl p-5">
-          <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
             <h2 className="text-sm font-semibold text-ink-muted">Net worth trend</h2>
-            {netWorthDelta !== null && (
-              <span
-                className={`flex items-center gap-0.5 text-xs font-bold ${netWorthDelta >= 0 ? "text-good" : "text-bad"}`}
-              >
-                {netWorthDelta >= 0 ? <ArrowUp size={12} strokeWidth={2.5} /> : <ArrowDown size={12} strokeWidth={2.5} />}
-                {money(Math.abs(netWorthDelta))} vs last month
-              </span>
-            )}
+            <div className="flex items-center gap-3">
+              {vsLastMonth.amount !== null && (
+                <span
+                  className={`flex items-center gap-0.5 text-xs font-bold ${vsLastMonth.amount >= 0 ? "text-good" : "text-bad"}`}
+                >
+                  {vsLastMonth.amount >= 0 ? <ArrowUp size={12} strokeWidth={2.5} /> : <ArrowDown size={12} strokeWidth={2.5} />}
+                  {money(Math.abs(vsLastMonth.amount))}
+                  {vsLastMonth.pct !== null && ` (${vsLastMonth.pct >= 0 ? "+" : ""}${vsLastMonth.pct.toFixed(1)}%)`} vs last
+                  month
+                </span>
+              )}
+              {vs3Months.amount !== null && (
+                <span
+                  className={`flex items-center gap-0.5 text-xs font-bold ${vs3Months.amount >= 0 ? "text-good" : "text-bad"}`}
+                >
+                  {vs3Months.amount >= 0 ? <ArrowUp size={12} strokeWidth={2.5} /> : <ArrowDown size={12} strokeWidth={2.5} />}
+                  {money(Math.abs(vs3Months.amount))}
+                  {vs3Months.pct !== null && ` (${vs3Months.pct >= 0 ? "+" : ""}${vs3Months.pct.toFixed(1)}%)`} vs 3 months
+                  ago
+                </span>
+              )}
+            </div>
           </div>
           <ResponsiveContainer width="100%" height={200}>
             <AreaChart data={netWorthHistory} margin={{ left: -20, right: 10 }}>
@@ -174,6 +195,11 @@ export default function Reports() {
           <div className={`text-lg md:text-xl font-bold tabular-nums ${stats.saved >= 0 ? "text-good" : "text-bad"}`}>
             {money(stats.saved)}
           </div>
+          {stats.income > 0 && (
+            <div className={`text-xs font-semibold mt-0.5 ${stats.saved >= 0 ? "text-good" : "text-bad"}`}>
+              {((stats.saved / stats.income) * 100).toFixed(0)}% of income
+            </div>
+          )}
         </div>
       </div>
 

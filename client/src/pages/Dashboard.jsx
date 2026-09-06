@@ -49,6 +49,10 @@ export default function Dashboard() {
 
   const walletAccounts = accounts.filter((a) => !["RECEIVABLE", "PAYABLE"].includes(a.type));
 
+  const netWorthChangePct =
+    summary.netWorthLastMonth ? ((summary.netWorth - summary.netWorthLastMonth) / Math.abs(summary.netWorthLastMonth)) * 100 : null;
+  const savingsRatePct = summary.month.income > 0 ? (summary.month.saved / summary.month.income) * 100 : null;
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -73,7 +77,9 @@ export default function Dashboard() {
             summary.netWorthLastMonth !== undefined
               ? {
                   positive: summary.netWorth >= summary.netWorthLastMonth,
-                  text: `${money(Math.abs(summary.netWorth - summary.netWorthLastMonth))} vs last month`,
+                  text: `${money(Math.abs(summary.netWorth - summary.netWorthLastMonth))}${
+                    netWorthChangePct !== null ? ` (${netWorthChangePct >= 0 ? "+" : ""}${netWorthChangePct.toFixed(1)}%)` : ""
+                  } vs last month`,
                 }
               : null
           }
@@ -85,6 +91,11 @@ export default function Dashboard() {
           value={money(summary.month.saved)}
           tone={summary.month.saved >= 0 ? "good" : "bad"}
           icon={PiggyBank}
+          delta={
+            savingsRatePct !== null
+              ? { positive: savingsRatePct >= 0, text: `${savingsRatePct.toFixed(0)}% of income saved` }
+              : null
+          }
         />
       </div>
 

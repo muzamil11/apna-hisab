@@ -340,6 +340,7 @@ export default function Accounts() {
   const [creditLimit, setCreditLimit] = useState("");
   const [targetAmount, setTargetAmount] = useState("");
   const [targetDate, setTargetDate] = useState("");
+  const [investedAmount, setInvestedAmount] = useState("");
   const [adding, setAdding] = useState(false);
   const [payingCard, setPayingCard] = useState(null);
   const [contributingGoal, setContributingGoal] = useState(null);
@@ -355,6 +356,9 @@ export default function Accounts() {
   const [renamingId, setRenamingId] = useState(null);
   const [renameValue, setRenameValue] = useState("");
   const [renaming, setRenaming] = useState(false);
+  const [editingInvestedId, setEditingInvestedId] = useState(null);
+  const [investedValue, setInvestedValue] = useState("");
+  const [savingInvested, setSavingInvested] = useState(false);
 
   async function load() {
     const [accountsRes, categoriesRes, peopleRes, closedRes] = await Promise.all([
@@ -417,6 +421,18 @@ export default function Accounts() {
     }
   }
 
+  async function handleSaveInvested(account) {
+    const value = investedValue === "" ? null : Number(investedValue);
+    setSavingInvested(true);
+    try {
+      await api.patch(`/accounts/${account._id}`, { investedAmount: value });
+      setEditingInvestedId(null);
+      await load();
+    } finally {
+      setSavingInvested(false);
+    }
+  }
+
   async function handleAdd(e) {
     e.preventDefault();
     if (!name) return;
@@ -429,6 +445,8 @@ export default function Accounts() {
       };
     } else if (type === "GOAL") {
       meta = { targetAmount: Number(targetAmount) || undefined, targetDate: targetDate || undefined };
+    } else if (type === "INVESTMENT" && investedAmount) {
+      meta = { investedAmount: Number(investedAmount) };
     }
     setAdding(true);
     try {
@@ -445,6 +463,7 @@ export default function Accounts() {
       setCreditLimit("");
       setTargetAmount("");
       setTargetDate("");
+      setInvestedAmount("");
       await load();
     } finally {
       setAdding(false);
@@ -506,6 +525,15 @@ export default function Accounts() {
             />
           </div>
         )}
+        {type === "INVESTMENT" && (
+          <input
+            type="number"
+            placeholder="Total invested / cost basis (optional — shows profit/loss %)"
+            value={investedAmount}
+            onChange={(e) => setInvestedAmount(e.target.value)}
+            className={`${inputClass} w-full`}
+          />
+        )}
         <div className="flex flex-wrap items-center gap-3">
           {type !== "GOAL" && (
             <input
@@ -537,10 +565,14 @@ export default function Accounts() {
             const Icon = iconFor(a.type);
             const goalPct =
               a.type === "GOAL" && a.meta?.targetAmount ? Math.min(100, (a.balance / a.meta.targetAmount) * 100) : null;
+            const invested = a.type === "INVESTMENT" ? a.meta?.investedAmount : null;
+            const profitAmount = a.investmentSummary?.profit ?? null;
+            const profitPct = a.investmentSummary?.profitPct ?? null;
             const isCardOpen = expandedCard === a._id;
             const isHistoryOpen = expandedId === a._id;
             const isArchiving = archivingId === a._id;
             const isRenaming = renamingId === a._id;
+            const isEditingInvested = editingInvestedId === a._id;
             return (
               <div key={a._id} className="bg-surface border border-border shadow-card rounded-xl overflow-hidden">
                 <div
@@ -637,6 +669,69 @@ export default function Accounts() {
                     >
                       Add money
                     </button>
+                  </div>
+                )}
+
+                {a.type === "INVESTMENT" && (
+                  <div
+                    className="px-4 pb-4 -mt-1 pt-3 border-t border-border flex items-center justify-between gap-2 text-xs"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {isEditingInvested ? (
+                      <div className="flex items-center gap-1.5 flex-1">
+                        <span className="text-ink-faint shrink-0">Invested Rs</span>
+                        <input
+                          autoFocus
+                          type="number"
+                          value={investedValue}
+                          onChange={(e) => setInvestedValue(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") handleSaveInvested(a);
+                            if (e.key === "Escape") setEditingInvestedId(null);
+                          }}
+                          className="min-w-0 flex-1 border border-accent rounded px-1.5 py-0.5 text-xs outline-none"
+                        />
+                        <button
+                          onClick={() => handleSaveInvested(a)}
+                          disabled={savingInvested}
+                          aria-label="Save invested amount"
+                          className="text-accent-ink shrink-0 disabled:opacity-40"
+                        >
+                          {savingInvested ? <Spinner size={13} /> : <Check size={13} />}
+                        </button>
+                      </div>
+                    ) : invested ? (
+                      <>
+                        <span className="text-ink-faint">
+                          Invested {money(invested)}
+                          <button
+                            onClick={() => {
+                              setEditingInvestedId(a._id);
+                              setInvestedValue(String(invested));
+                            }}
+                            aria-label="Edit invested amount"
+                            className="text-ink-faint hover:text-accent-ink ml-1.5 align-middle"
+                          >
+                            <Pencil size={11} className="inline" />
+                          </button>
+                        </span>
+                        <span className={`font-bold tabular-nums ${profitAmount >= 0 ? "text-good" : "text-bad"}`}>
+                          {profitAmount >= 0 ? "+" : ""}
+                          {money(profitAmount)} ({profitPct >= 0 ? "+" : ""}
+                          {profitPct.toFixed(1)}%)
+                        </span>
+                      </>
+                    ) : (
+                      <button
+                        onClick={() => {
+                          setEditingInvestedId(a._id);
+                          setInvestedValue("");
+                        }}
+                        className="text-accent-ink font-medium"
+                      >
+                        + Add invested amount to track profit/loss %
+                      </button>
+                    )}
                   </div>
                 )}
 
