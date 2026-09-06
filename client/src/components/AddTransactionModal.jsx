@@ -24,33 +24,49 @@ export default function AddTransactionModal({ accounts, categories, people, onCl
   const [toAccount, setToAccount] = useState("");
   const [category, setCategory] = useState("");
   const [person, setPerson] = useState("");
+  const [willBeRepaid, setWillBeRepaid] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
   const relevantCategories = categories.filter((c) => c.direction === (type === "INCOME" ? "INCOME" : "EXPENSE"));
   const active = TYPES.find((t) => t.key === type);
+  const selectedPerson = people.find((p) => p._id === person);
+  const isRepayable = type === "EXPENSE" && selectedPerson && willBeRepaid;
 
   async function handleSubmit(e) {
     e.preventDefault();
     setError("");
     if (!amount || !title) return setError("Amount and title are required.");
-    if (type !== "TRANSFER" && !category) return setError("Please choose a category.");
+    if (type !== "TRANSFER" && !category && !isRepayable) return setError("Please choose a category.");
     if ((type === "EXPENSE" || type === "TRANSFER") && !fromAccount) return setError("Choose which account this came from.");
     if ((type === "INCOME" || type === "TRANSFER") && !toAccount) return setError("Choose where this went.");
+    if (isRepayable && !selectedPerson.receivableId) return setError("This person's lending ledger couldn't be found.");
 
     setSaving(true);
     try {
-      await api.post("/transactions", {
-        type,
-        amount: Number(amount),
-        title,
-        note,
-        date,
-        fromAccount: fromAccount || undefined,
-        toAccount: toAccount || undefined,
-        category: type !== "TRANSFER" ? category : undefined,
-        person: person || undefined,
-      });
+      const payload = isRepayable
+        ? {
+            type: "TRANSFER",
+            amount: Number(amount),
+            title,
+            note,
+            date,
+            fromAccount,
+            toAccount: selectedPerson.receivableId,
+            person,
+          }
+        : {
+            type,
+            amount: Number(amount),
+            title,
+            note,
+            date,
+            fromAccount: fromAccount || undefined,
+            toAccount: toAccount || undefined,
+            category: type !== "TRANSFER" ? category : undefined,
+            person: person || undefined,
+          };
+      await api.post("/transactions", payload);
       onCreated();
       onClose();
     } catch (err) {
@@ -129,7 +145,7 @@ export default function AddTransactionModal({ accounts, categories, people, onCl
             </select>
           )}
 
-          {type !== "TRANSFER" && (
+          {type !== "TRANSFER" && !isRepayable && (
             <select value={category} onChange={(e) => setCategory(e.target.value)} className={inputClass}>
               <option value="">Category</option>
               {relevantCategories.map((c) => (
@@ -141,14 +157,30 @@ export default function AddTransactionModal({ accounts, categories, people, onCl
           )}
 
           {type === "EXPENSE" && people.length > 0 && (
-            <select value={person} onChange={(e) => setPerson(e.target.value)} className={inputClass}>
-              <option value="">Spent on yourself (default)</option>
-              {people.map((p) => (
-                <option key={p._id} value={p._id}>
-                  Spent on {p.name}
-                </option>
-              ))}
-            </select>
+            <>
+              <select value={person} onChange={(e) => setPerson(e.target.value)} className={inputClass}>
+                <option value="">Spent on yourself (default)</option>
+                {people.map((p) => (
+                  <option key={p._id} value={p._id}>
+                    Spent on {p.name}
+                  </option>
+                ))}
+              </select>
+              {selectedPerson && (
+                <label className="flex items-start gap-2.5 text-sm text-ink-muted bg-canvas rounded-lg px-3.5 py-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={willBeRepaid}
+                    onChange={(e) => setWillBeRepaid(e.target.checked)}
+                    className="mt-0.5 accent-accent"
+                  />
+                  <span>
+                    {selectedPerson.name} will pay you back — add this to Lending instead of counting it as your own
+                    expense.
+                  </span>
+                </label>
+              )}
+            </>
           )}
 
           <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={inputClass} />

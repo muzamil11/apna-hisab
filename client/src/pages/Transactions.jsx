@@ -29,7 +29,13 @@ export default function Transactions() {
     setTransactions(txRes.data.transactions);
     setAccounts(accountsRes.data.accounts);
     setCategories(categoriesRes.data);
-    setPeople(peopleRes.data.map((p) => ({ _id: p._id, name: p.name })));
+    setPeople(
+      peopleRes.data.map((p) => ({
+        _id: p._id,
+        name: p.name,
+        receivableId: p.accounts.find((a) => a.type === "RECEIVABLE")?._id,
+      }))
+    );
   }
 
   useEffect(() => {

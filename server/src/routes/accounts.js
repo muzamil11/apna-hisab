@@ -3,13 +3,23 @@ import Account from "../models/Account.js";
 import Transaction from "../models/Transaction.js";
 import { requireAuth } from "../middleware/auth.js";
 import { getNetWorth, recomputeAccountBalance, applyTransactionEffects } from "../utils/ledger.js";
+import { getCardSummary } from "../utils/creditCard.js";
 
 const router = Router();
 router.use(requireAuth);
 
 router.get("/", async (req, res) => {
   const { netWorth, accounts } = await getNetWorth(req.userId);
-  res.json({ netWorth, accounts });
+
+  const withSummaries = await Promise.all(
+    accounts.map(async (account) => {
+      if (account.type !== "CREDIT_CARD") return account.toObject();
+      const cardSummary = await getCardSummary(Transaction, account);
+      return { ...account.toObject(), cardSummary };
+    })
+  );
+
+  res.json({ netWorth, accounts: withSummaries });
 });
 
 router.post("/", async (req, res) => {

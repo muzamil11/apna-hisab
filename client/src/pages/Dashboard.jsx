@@ -26,7 +26,13 @@ export default function Dashboard() {
     setSummary(summaryRes.data);
     setAccounts(accountsRes.data.accounts);
     setCategories(categoriesRes.data);
-    setPeople(peopleRes.data.map((p) => ({ _id: p._id, name: p.name })));
+    setPeople(
+      peopleRes.data.map((p) => ({
+        _id: p._id,
+        name: p.name,
+        receivableId: p.accounts.find((a) => a.type === "RECEIVABLE")?._id,
+      }))
+    );
   }
 
   useEffect(() => {
@@ -78,6 +84,25 @@ export default function Dashboard() {
                 <AlertTriangle size={16} strokeWidth={2} className="shrink-0" />
                 {b.exceeded && `You've gone over your ${b.budget.category?.name || "budget"} limit this month.`}
                 {b.missed && `You're below your ${money(b.budget.limitAmount)} savings goal this month.`}
+              </div>
+            ))}
+        </div>
+      )}
+
+      {walletAccounts.some((a) => a.cardSummary?.billed > 0) && (
+        <div className="space-y-2">
+          {walletAccounts
+            .filter((a) => a.cardSummary?.billed > 0)
+            .map((a) => (
+              <div
+                key={a._id}
+                className={`flex items-center gap-2.5 rounded-lg px-4 py-3 text-sm font-medium ${
+                  a.cardSummary.overdue ? "bg-bad-soft text-bad" : "bg-warn-soft text-warn"
+                }`}
+              >
+                <AlertTriangle size={16} strokeWidth={2} className="shrink-0" />
+                {a.name}: {money(a.cardSummary.billed)} {a.cardSummary.overdue ? "overdue since" : "due by"}{" "}
+                {new Date(a.cardSummary.dueDate).toLocaleDateString("en-PK", { day: "numeric", month: "short" })}
               </div>
             ))}
         </div>
