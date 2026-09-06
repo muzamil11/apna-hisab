@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
-import { Plus, TrendingUp, TrendingDown, ArrowLeftRight, Pencil, Trash2 } from "lucide-react";
+import { useSearchParams } from "react-router-dom";
+import { Plus, TrendingUp, TrendingDown, ArrowLeftRight, Pencil, Trash2, X } from "lucide-react";
 import api from "../api/client.js";
 import AddTransactionModal from "../components/AddTransactionModal.jsx";
 import Spinner from "../components/Spinner.jsx";
 import { useConfirm } from "../context/ConfirmContext.jsx";
 
 const money = (n) => `Rs ${Math.round(n).toLocaleString("en-PK")}`;
+const PAGE_SIZE = 25;
 
 const TYPE_META = {
   INCOME: { text: "Income", className: "bg-good-soft text-good", icon: TrendingUp },
@@ -16,8 +18,15 @@ const TYPE_META = {
 
 export default function Transactions() {
   const confirm = useConfirm();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const accountFilter = searchParams.get("account") || "";
+  const personFilter = searchParams.get("person") || "";
+
   const [transactions, setTransactions] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(0);
   const [accounts, setAccounts] = useState([]);
+  const [closedAccounts, setClosedAccounts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [people, setPeople] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -25,15 +34,30 @@ export default function Transactions() {
   const [editingTx, setEditingTx] = useState(null);
   const [deletingId, setDeletingId] = useState(null);
 
-  async function loadAll() {
-    const [txRes, accountsRes, categoriesRes, peopleRes] = await Promise.all([
-      api.get("/transactions"),
+  async function loadTransactions() {
+    setLoading(true);
+    const { data } = await api.get("/transactions", {
+      params: {
+        account: accountFilter || undefined,
+        person: personFilter || undefined,
+        limit: PAGE_SIZE,
+        skip: page * PAGE_SIZE,
+      },
+    });
+    setTransactions(data.transactions);
+    setTotal(data.total);
+    setLoading(false);
+  }
+
+  async function loadFilters() {
+    const [accountsRes, closedRes, categoriesRes, peopleRes] = await Promise.all([
       api.get("/accounts"),
+      api.get("/accounts/archived"),
       api.get("/categories"),
       api.get("/people"),
     ]);
-    setTransactions(txRes.data.transactions);
     setAccounts(accountsRes.data.accounts);
+    setClosedAccounts(closedRes.data);
     setCategories(categoriesRes.data);
     setPeople(
       peopleRes.data.map((p) => ({
@@ -45,21 +69,65 @@ export default function Transactions() {
   }
 
   useEffect(() => {
-    loadAll().finally(() => setLoading(false));
+    loadFilters();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    loadTransactions();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accountFilter, personFilter, page]);
+
+  // Any filter change resets to page 1 — a stale page number from a longer
+  // list could otherwise land past the end of a shorter filtered one.
+  function setAccountFilter(value) {
+    setPage(0);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (value) next.set("account", value);
+      else next.delete("account");
+      return next;
+    });
+  }
+
+  function setPersonFilter(value) {
+    setPage(0);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (value) next.set("person", value);
+      else next.delete("person");
+      return next;
+    });
+  }
+
+  function clearFilters() {
+    setPage(0);
+    setSearchParams({});
+  }
 
   async function handleDelete(tx) {
     if (!(await confirm(`Delete "${tx.title}" (${money(tx.amount)})? This can't be undone.`))) return;
     setDeletingId(tx._id);
     try {
       await api.delete(`/transactions/${tx._id}`);
-      await loadAll();
+      await loadTransactions();
     } finally {
       setDeletingId(null);
     }
   }
 
   const walletAccounts = accounts.filter((a) => !["RECEIVABLE", "PAYABLE"].includes(a.type));
+  const allAccountsForFilter = [
+    ...walletAccounts,
+    ...closedAccounts.filter((a) => !["RECEIVABLE", "PAYABLE"].includes(a.type)),
+  ];
+  const editModalAccounts = [...walletAccounts, ...closedAccounts.filter((a) => !["RECEIVABLE", "PAYABLE"].includes(a.type))];
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const hasFilter = accountFilter || personFilter;
+  const filteredAccountName = allAccountsForFilter.find((a) => a._id === accountFilter)?.name;
+  const filteredPersonName = people.find((p) => p._id === personFilter)?.name;
+  const inputClass =
+    "border border-border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent transition-shadow bg-surface";
 
   return (
     <div className="space-y-5">
@@ -75,6 +143,42 @@ export default function Transactions() {
           <Plus size={16} strokeWidth={2.5} /> Add
         </button>
       </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <select value={accountFilter} onChange={(e) => setAccountFilter(e.target.value)} className={inputClass}>
+          <option value="">All accounts</option>
+          {allAccountsForFilter.map((a) => (
+            <option key={a._id} value={a._id}>
+              {a.name}
+              {a.archived ? " (closed)" : ""}
+            </option>
+          ))}
+        </select>
+        <select value={personFilter} onChange={(e) => setPersonFilter(e.target.value)} className={inputClass}>
+          <option value="">All people</option>
+          {people.map((p) => (
+            <option key={p._id} value={p._id}>
+              {p.name}
+            </option>
+          ))}
+        </select>
+        {hasFilter && (
+          <button
+            onClick={clearFilters}
+            className="flex items-center gap-1 text-sm font-medium text-ink-faint hover:text-ink transition-colors"
+          >
+            <X size={14} /> Clear
+          </button>
+        )}
+      </div>
+
+      {hasFilter && !loading && (
+        <p className="text-sm text-ink-faint">
+          {total} {total === 1 ? "entry" : "entries"}
+          {filteredAccountName && ` for ${filteredAccountName}`}
+          {filteredPersonName && ` with ${filteredPersonName}`}
+        </p>
+      )}
 
       {loading ? (
         <div className="flex items-center justify-center py-16 text-ink-faint">
@@ -124,8 +228,32 @@ export default function Transactions() {
             );
           })}
           {transactions.length === 0 && (
-            <p className="px-4 py-8 text-sm text-ink-faint text-center">No transactions yet — tap Add to record one.</p>
+            <p className="px-4 py-8 text-sm text-ink-faint text-center">
+              {hasFilter ? "No entries match this filter." : "No transactions yet — tap Add to record one."}
+            </p>
           )}
+        </div>
+      )}
+
+      {!loading && totalPages > 1 && (
+        <div className="flex items-center justify-between text-sm">
+          <button
+            disabled={page === 0}
+            onClick={() => setPage((p) => p - 1)}
+            className="px-3 py-1.5 rounded-lg border border-border disabled:opacity-40 font-medium"
+          >
+            Previous
+          </button>
+          <span className="text-ink-faint">
+            Page {page + 1} of {totalPages} ({total} total)
+          </span>
+          <button
+            disabled={page >= totalPages - 1}
+            onClick={() => setPage((p) => p + 1)}
+            className="px-3 py-1.5 rounded-lg border border-border disabled:opacity-40 font-medium"
+          >
+            Next
+          </button>
         </div>
       )}
 
@@ -143,18 +271,18 @@ export default function Transactions() {
           categories={categories}
           people={people}
           onClose={() => setShowAdd(false)}
-          onCreated={loadAll}
+          onCreated={loadTransactions}
         />
       )}
 
       {editingTx && (
         <AddTransactionModal
-          accounts={walletAccounts}
+          accounts={editModalAccounts}
           categories={categories}
           people={people}
           editingTx={editingTx}
           onClose={() => setEditingTx(null)}
-          onCreated={loadAll}
+          onCreated={loadTransactions}
         />
       )}
     </div>

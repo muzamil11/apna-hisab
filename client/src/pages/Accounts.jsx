@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import {
   Landmark,
   Wallet,
@@ -17,6 +18,7 @@ import {
   ArrowUpRight,
   ArrowDownLeft,
   Check,
+  ExternalLink,
 } from "lucide-react";
 import api from "../api/client.js";
 import Spinner from "../components/Spinner.jsx";
@@ -610,6 +612,14 @@ function AccountHistory({ account, onEdit, onChanged }) {
             Next
           </button>
         </div>
+      )}
+      {total > 0 && (
+        <Link
+          to={`/transactions?account=${account._id}`}
+          className="flex items-center justify-center gap-1.5 text-xs font-semibold text-accent-ink hover:text-accent pt-3 mt-2 border-t border-border"
+        >
+          View full history <ExternalLink size={12} />
+        </Link>
       )}
     </div>
   );

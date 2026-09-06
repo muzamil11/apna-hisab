@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { BarChart, Bar, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts";
-import { Plus, ArrowUpRight, ArrowDownLeft, ChevronDown, Pencil, Trash2, X } from "lucide-react";
+import { Plus, ArrowUpRight, ArrowDownLeft, ChevronDown, Pencil, Trash2, X, ExternalLink } from "lucide-react";
 import api from "../api/client.js";
 import Spinner from "../components/Spinner.jsx";
 import { useConfirm } from "../context/ConfirmContext.jsx";
@@ -294,6 +295,14 @@ function PersonHistory({ person, onEdit, onChanged }) {
             Next
           </button>
         </div>
+      )}
+      {total > 0 && (
+        <Link
+          to={`/transactions?person=${person._id}`}
+          className="flex items-center justify-center gap-1.5 text-xs font-semibold text-accent-ink hover:text-accent pt-3 mt-2 border-t border-border"
+        >
+          View full history <ExternalLink size={12} />
+        </Link>
       )}
     </div>
   );
