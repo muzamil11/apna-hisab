@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Landmark, Wallet, CreditCard, LineChart, PiggyBank, Building2, Target, AlertCircle, X } from "lucide-react";
 import api from "../api/client.js";
+import Spinner from "../components/Spinner.jsx";
 
 const money = (n) => `Rs ${Math.round(n).toLocaleString("en-PK")}`;
 const fmtDate = (d) => new Date(d).toLocaleDateString("en-PK", { day: "numeric", month: "short" });
@@ -30,17 +31,20 @@ function PayBillForm({ card, cashAccounts, onClose, onDone }) {
     e.preventDefault();
     if (!amount || !fromAccount) return;
     setSaving(true);
-    await api.post("/transactions", {
-      type: "TRANSFER",
-      amount: Number(amount),
-      title: `${card.name} — bill payment`,
-      fromAccount,
-      toAccount: card._id,
-      date,
-    });
-    setSaving(false);
-    onDone();
-    onClose();
+    try {
+      await api.post("/transactions", {
+        type: "TRANSFER",
+        amount: Number(amount),
+        title: `${card.name} — bill payment`,
+        fromAccount,
+        toAccount: card._id,
+        date,
+      });
+      onDone();
+      onClose();
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -70,8 +74,9 @@ function PayBillForm({ card, cashAccounts, onClose, onDone }) {
         <button
           type="submit"
           disabled={saving}
-          className="w-full bg-accent hover:bg-accent-ink text-white font-semibold py-2.5 rounded-lg transition-colors disabled:opacity-50"
+          className="w-full flex items-center justify-center gap-2 bg-accent hover:bg-accent-ink text-white font-semibold py-2.5 rounded-lg transition-colors disabled:opacity-50"
         >
+          {saving && <Spinner />}
           {saving ? "Saving…" : "Record payment"}
         </button>
       </form>
@@ -89,17 +94,20 @@ function ContributeForm({ goal, cashAccounts, onClose, onDone }) {
     e.preventDefault();
     if (!amount || !fromAccount) return;
     setSaving(true);
-    await api.post("/transactions", {
-      type: "TRANSFER",
-      amount: Number(amount),
-      title: `${goal.name} — contribution`,
-      fromAccount,
-      toAccount: goal._id,
-      date,
-    });
-    setSaving(false);
-    onDone();
-    onClose();
+    try {
+      await api.post("/transactions", {
+        type: "TRANSFER",
+        amount: Number(amount),
+        title: `${goal.name} — contribution`,
+        fromAccount,
+        toAccount: goal._id,
+        date,
+      });
+      onDone();
+      onClose();
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -130,8 +138,9 @@ function ContributeForm({ goal, cashAccounts, onClose, onDone }) {
         <button
           type="submit"
           disabled={saving}
-          className="w-full bg-accent hover:bg-accent-ink text-white font-semibold py-2.5 rounded-lg transition-colors disabled:opacity-50"
+          className="w-full flex items-center justify-center gap-2 bg-accent hover:bg-accent-ink text-white font-semibold py-2.5 rounded-lg transition-colors disabled:opacity-50"
         >
+          {saving && <Spinner />}
           {saving ? "Saving…" : "Add to goal"}
         </button>
         <p className="text-xs text-ink-faint text-center">
@@ -145,6 +154,7 @@ function ContributeForm({ goal, cashAccounts, onClose, onDone }) {
 export default function Accounts() {
   const [accounts, setAccounts] = useState([]);
   const [netWorth, setNetWorth] = useState(0);
+  const [loading, setLoading] = useState(true);
   const [name, setName] = useState("");
   const [type, setType] = useState("BANK");
   const [startingBalance, setStartingBalance] = useState("");
@@ -152,6 +162,7 @@ export default function Accounts() {
   const [dueDay, setDueDay] = useState("");
   const [targetAmount, setTargetAmount] = useState("");
   const [targetDate, setTargetDate] = useState("");
+  const [adding, setAdding] = useState(false);
   const [payingCard, setPayingCard] = useState(null);
   const [contributingGoal, setContributingGoal] = useState(null);
 
@@ -162,7 +173,7 @@ export default function Accounts() {
   }
 
   useEffect(() => {
-    load();
+    load().finally(() => setLoading(false));
   }, []);
 
   async function handleAdd(e) {
@@ -174,19 +185,24 @@ export default function Accounts() {
     } else if (type === "GOAL") {
       meta = { targetAmount: Number(targetAmount) || undefined, targetDate: targetDate || undefined };
     }
-    await api.post("/accounts", {
-      name,
-      type,
-      startingBalance: startingBalance ? Number(startingBalance) : 0,
-      meta,
-    });
-    setName("");
-    setStartingBalance("");
-    setBillingCycleDay("");
-    setDueDay("");
-    setTargetAmount("");
-    setTargetDate("");
-    load();
+    setAdding(true);
+    try {
+      await api.post("/accounts", {
+        name,
+        type,
+        startingBalance: startingBalance ? Number(startingBalance) : 0,
+        meta,
+      });
+      setName("");
+      setStartingBalance("");
+      setBillingCycleDay("");
+      setDueDay("");
+      setTargetAmount("");
+      setTargetDate("");
+      await load();
+    } finally {
+      setAdding(false);
+    }
   }
 
   const cashAccounts = accounts.filter((a) => a.type === "BANK" || a.type === "CASH");
@@ -271,12 +287,22 @@ export default function Accounts() {
               className={`${inputClass} flex-1 min-w-[220px]`}
             />
           )}
-          <button type="submit" className="bg-accent hover:bg-accent-ink text-white px-5 py-2.5 rounded-lg font-semibold text-sm transition-colors">
+          <button
+            type="submit"
+            disabled={adding}
+            className="flex items-center justify-center gap-1.5 bg-accent hover:bg-accent-ink text-white px-5 py-2.5 rounded-lg font-semibold text-sm transition-colors disabled:opacity-50"
+          >
+            {adding && <Spinner size={15} />}
             {type === "GOAL" ? "Create Goal" : "Add Account"}
           </button>
         </div>
       </form>
 
+      {loading ? (
+        <div className="flex items-center justify-center py-16 text-ink-faint">
+          <Spinner size={22} />
+        </div>
+      ) : (
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         {accounts.map((a) => {
           const Icon = iconFor(a.type);
@@ -352,6 +378,7 @@ export default function Accounts() {
           <p className="text-sm text-ink-faint py-4 text-center col-span-2">No accounts yet — add your first one above.</p>
         )}
       </div>
+      )}
 
       {payingCard && (
         <PayBillForm card={payingCard} cashAccounts={cashAccounts} onClose={() => setPayingCard(null)} onDone={load} />

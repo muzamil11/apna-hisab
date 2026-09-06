@@ -4,6 +4,7 @@ import { Plus, Wallet, TrendingUp, TrendingDown, PiggyBank, AlertTriangle } from
 import api from "../api/client.js";
 import StatCard from "../components/StatCard.jsx";
 import AddTransactionModal from "../components/AddTransactionModal.jsx";
+import Spinner from "../components/Spinner.jsx";
 
 const COLORS = ["#4F46E5", "#16A34A", "#D97706", "#DC2626", "#7C3AED", "#0891B2", "#DB2777"];
 
@@ -39,7 +40,12 @@ export default function Dashboard() {
     loadAll();
   }, []);
 
-  if (!summary) return <p className="text-ink-faint">Loading…</p>;
+  if (!summary)
+    return (
+      <div className="flex items-center justify-center py-24 text-ink-faint">
+        <Spinner size={24} />
+      </div>
+    );
 
   const walletAccounts = accounts.filter((a) => !["RECEIVABLE", "PAYABLE"].includes(a.type));
 

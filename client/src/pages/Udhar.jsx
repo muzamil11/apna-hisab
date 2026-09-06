@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { BarChart, Bar, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts";
 import { Plus, ArrowUpRight, ArrowDownLeft, ChevronDown, Pencil, Trash2, X } from "lucide-react";
 import api from "../api/client.js";
+import Spinner from "../components/Spinner.jsx";
 
 const shortMoney = (n) => {
   const abs = Math.abs(n);
@@ -76,16 +77,19 @@ function EntryForm({ person, cashAccounts, editingTx, onClose, onDone }) {
       payload[direction === "fromAccount" ? "toAccount" : "fromAccount"] = cashAccount;
     }
 
-    if (editingTx) {
-      // Editing replays as delete-then-recreate, so the old entry's effects
-      // are cleanly reversed before the new ones are applied — no special
-      // "diff the ledger" logic needed.
-      await api.delete(`/transactions/${editingTx._id}`);
+    try {
+      if (editingTx) {
+        // Editing replays as delete-then-recreate, so the old entry's effects
+        // are cleanly reversed before the new ones are applied — no special
+        // "diff the ledger" logic needed.
+        await api.delete(`/transactions/${editingTx._id}`);
+      }
+      await api.post("/transactions", payload);
+      onDone();
+      onClose();
+    } finally {
+      setSaving(false);
     }
-    await api.post("/transactions", payload);
-    setSaving(false);
-    onDone();
-    onClose();
   }
 
   return (
@@ -167,8 +171,9 @@ function EntryForm({ person, cashAccounts, editingTx, onClose, onDone }) {
         <button
           type="submit"
           disabled={saving}
-          className="w-full bg-accent hover:bg-accent-ink text-white font-semibold py-3 rounded-lg transition-colors disabled:opacity-50"
+          className="w-full flex items-center justify-center gap-2 bg-accent hover:bg-accent-ink text-white font-semibold py-3 rounded-lg transition-colors disabled:opacity-50"
         >
+          {saving && <Spinner />}
           {saving ? "Saving…" : editingTx ? "Save changes" : "Save"}
         </button>
       </form>
@@ -181,6 +186,7 @@ function PersonHistory({ person, onEdit, onChanged }) {
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [deletingId, setDeletingId] = useState(null);
 
   function reload() {
     setLoading(true);
@@ -200,9 +206,14 @@ function PersonHistory({ person, onEdit, onChanged }) {
 
   async function handleDelete(tx) {
     if (!window.confirm(`Delete "${tx.title}" (${money(tx.amount)})? This can't be undone.`)) return;
-    await api.delete(`/transactions/${tx._id}`);
-    await reload();
-    onChanged();
+    setDeletingId(tx._id);
+    try {
+      await api.delete(`/transactions/${tx._id}`);
+      await reload();
+      onChanged();
+    } finally {
+      setDeletingId(null);
+    }
   }
 
   const personAccounts = { receivable: person.receivable, payable: person.payable };
@@ -210,13 +221,18 @@ function PersonHistory({ person, onEdit, onChanged }) {
 
   return (
     <div className="border-t border-border px-4 py-3 bg-canvas/50">
-      {loading && <p className="text-sm text-ink-faint py-2">Loading…</p>}
+      {loading && (
+        <div className="flex items-center justify-center py-4 text-ink-faint">
+          <Spinner size={18} />
+        </div>
+      )}
       {!loading && entries.length === 0 && <p className="text-sm text-ink-faint py-2">No entries yet.</p>}
       <div className="space-y-1">
         {entries.map((tx) => {
           const key = actionKeyForTx(tx, personAccounts);
           const action = key && ACTIONS[key];
           if (!action) return null;
+          const isDeleting = deletingId === tx._id;
           return (
             <div key={tx._id} className="group flex items-center gap-3 py-1.5">
               <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${action.tone === "good" ? "bg-good-soft text-good" : "bg-bad-soft text-bad"}`}>
@@ -236,17 +252,19 @@ function PersonHistory({ person, onEdit, onChanged }) {
               <div className="flex items-center gap-2 shrink-0">
                 <button
                   onClick={() => onEdit(tx)}
+                  disabled={isDeleting}
                   aria-label="Edit entry"
-                  className="text-ink-faint hover:text-accent-ink"
+                  className="text-ink-faint hover:text-accent-ink disabled:opacity-40"
                 >
                   <Pencil size={14} />
                 </button>
                 <button
                   onClick={() => handleDelete(tx)}
+                  disabled={isDeleting}
                   aria-label="Delete entry"
-                  className="text-ink-faint hover:text-bad"
+                  className="text-ink-faint hover:text-bad disabled:opacity-40"
                 >
-                  <Trash2 size={14} />
+                  {isDeleting ? <Spinner size={14} /> : <Trash2 size={14} />}
                 </button>
               </div>
             </div>
@@ -281,7 +299,10 @@ function PersonHistory({ person, onEdit, onChanged }) {
 export default function Udhar() {
   const [people, setPeople] = useState([]);
   const [accounts, setAccounts] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [name, setName] = useState("");
+  const [addingPerson, setAddingPerson] = useState(false);
+  const [removingId, setRemovingId] = useState(null);
   const [activePerson, setActivePerson] = useState(null);
   const [editing, setEditing] = useState(null); // { person, tx }
   const [expanded, setExpanded] = useState(null);
@@ -294,24 +315,32 @@ export default function Udhar() {
   }
 
   useEffect(() => {
-    load();
+    load().finally(() => setLoading(false));
   }, []);
 
   async function handleAdd(e) {
     e.preventDefault();
     if (!name) return;
-    await api.post("/people", { name });
-    setName("");
-    load();
+    setAddingPerson(true);
+    try {
+      await api.post("/people", { name });
+      setName("");
+      await load();
+    } finally {
+      setAddingPerson(false);
+    }
   }
 
   async function handleRemovePerson(person) {
     if (!window.confirm(`Remove ${person.name}? This only works if their balance is fully settled.`)) return;
+    setRemovingId(person._id);
     try {
       await api.delete(`/people/${person._id}`);
-      load();
+      await load();
     } catch (err) {
       alert(err.response?.data?.error || "Could not remove this person.");
+    } finally {
+      setRemovingId(null);
     }
   }
 
@@ -340,117 +369,132 @@ export default function Udhar() {
         </p>
       </div>
 
-      {overview.length > 0 && (
-        <div className="bg-surface border border-border shadow-card rounded-xl p-5">
-          <h2 className="text-sm font-semibold text-ink-muted mb-3">Who owes what</h2>
-          <ResponsiveContainer width="100%" height={overviewHeight}>
-            <BarChart data={overview} layout="vertical" margin={{ left: 10, right: 30 }}>
-              <XAxis type="number" tickFormatter={shortMoney} tick={{ fontSize: 11, fill: "#94A3B8" }} axisLine={false} tickLine={false} />
-              <YAxis
-                type="category"
-                dataKey="name"
-                width={80}
-                tick={{ fontSize: 12, fill: "#0F172A" }}
-                axisLine={false}
-                tickLine={false}
-              />
-              <ReferenceLine x={0} stroke="#E2E8F0" />
-              <Tooltip
-                formatter={(v) => [`Rs ${Math.abs(v).toLocaleString("en-PK")}`, v >= 0 ? "Owes you" : "You owe"]}
-                cursor={{ fill: "#F6F7FB" }}
-              />
-              <Bar dataKey="net" radius={4} barSize={16}>
-                {overview.map((p, i) => (
-                  <Cell key={i} fill={p.net >= 0 ? "#16A34A" : "#DC2626"} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
+      {loading ? (
+        <div className="flex items-center justify-center py-16 text-ink-faint">
+          <Spinner size={22} />
         </div>
-      )}
-
-      <form onSubmit={handleAdd} className="bg-surface border border-border shadow-card rounded-xl p-4 flex gap-3">
-        <input
-          type="text"
-          placeholder="Name — who you lent to or borrowed from"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          className={`${inputClass} flex-1`}
-        />
-        <button type="submit" className="bg-accent hover:bg-accent-ink text-white px-5 py-2.5 rounded-lg font-semibold text-sm transition-colors shrink-0">
-          Add
-        </button>
-      </form>
-
-      <div className="space-y-3">
-        {people.map((p) => {
-          const receivable = p.accounts.find((a) => a.type === "RECEIVABLE");
-          const payable = p.accounts.find((a) => a.type === "PAYABLE");
-          const isOpen = expanded === p._id;
-          return (
-            <div key={p._id} className="bg-surface border border-border shadow-card rounded-xl overflow-hidden">
-              <div
-                className="p-4 cursor-pointer"
-                role="button"
-                tabIndex={0}
-                onClick={() => setExpanded(isOpen ? null : p._id)}
-                onKeyDown={(e) => e.key === "Enter" && setExpanded(isOpen ? null : p._id)}
-              >
-                <div className="flex items-center justify-between mb-3">
-                  <span className="font-bold">{p.name}</span>
-                  <div className="flex items-center gap-3">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setActivePerson({ ...p, receivable, payable });
-                      }}
-                      className="flex items-center gap-1 text-sm text-accent-ink font-semibold"
-                    >
-                      <Plus size={15} strokeWidth={2.5} /> Entry
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleRemovePerson(p);
-                      }}
-                      aria-label={`Remove ${p.name}`}
-                      className="text-ink-faint hover:text-bad"
-                    >
-                      <Trash2 size={15} />
-                    </button>
-                    <ChevronDown
-                      size={18}
-                      aria-hidden="true"
-                      className={`text-ink-faint transition-transform ${isOpen ? "rotate-180" : ""}`}
-                    />
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <div className="text-xs text-ink-faint font-medium mb-0.5">They owe you</div>
-                    <div className="font-bold text-good tabular-nums">{money(receivable?.balance || 0)}</div>
-                  </div>
-                  <div>
-                    <div className="text-xs text-ink-faint font-medium mb-0.5">You owe them</div>
-                    <div className="font-bold text-bad tabular-nums">{money(payable?.balance || 0)}</div>
-                  </div>
-                </div>
-              </div>
-              {isOpen && (
-                <PersonHistory
-                  key={historyKey}
-                  person={{ ...p, receivable, payable }}
-                  onEdit={(tx) => setEditing({ person: { ...p, receivable, payable }, tx })}
-                  onChanged={load}
-                />
-              )}
+      ) : (
+        <>
+          {overview.length > 0 && (
+            <div className="bg-surface border border-border shadow-card rounded-xl p-5">
+              <h2 className="text-sm font-semibold text-ink-muted mb-3">Who owes what</h2>
+              <ResponsiveContainer width="100%" height={overviewHeight}>
+                <BarChart data={overview} layout="vertical" margin={{ left: 10, right: 30 }}>
+                  <XAxis type="number" tickFormatter={shortMoney} tick={{ fontSize: 11, fill: "#94A3B8" }} axisLine={false} tickLine={false} />
+                  <YAxis
+                    type="category"
+                    dataKey="name"
+                    width={80}
+                    tick={{ fontSize: 12, fill: "#0F172A" }}
+                    axisLine={false}
+                    tickLine={false}
+                  />
+                  <ReferenceLine x={0} stroke="#E2E8F0" />
+                  <Tooltip
+                    formatter={(v) => [`Rs ${Math.abs(v).toLocaleString("en-PK")}`, v >= 0 ? "Owes you" : "You owe"]}
+                    cursor={{ fill: "#F6F7FB" }}
+                  />
+                  <Bar dataKey="net" radius={4} barSize={16}>
+                    {overview.map((p, i) => (
+                      <Cell key={i} fill={p.net >= 0 ? "#16A34A" : "#DC2626"} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
             </div>
-          );
-        })}
-        {people.length === 0 && (
-          <p className="text-sm text-ink-faint text-center py-6">Add someone above to start tracking what you lend or borrow.</p>
-        )}
-      </div>
+          )}
+
+          <form onSubmit={handleAdd} className="bg-surface border border-border shadow-card rounded-xl p-4 flex gap-3">
+            <input
+              type="text"
+              placeholder="Name — who you lent to or borrowed from"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className={`${inputClass} flex-1`}
+            />
+            <button
+              type="submit"
+              disabled={addingPerson}
+              className="flex items-center justify-center gap-1.5 bg-accent hover:bg-accent-ink text-white px-5 py-2.5 rounded-lg font-semibold text-sm transition-colors shrink-0 disabled:opacity-50"
+            >
+              {addingPerson && <Spinner size={15} />}
+              Add
+            </button>
+          </form>
+
+          <div className="space-y-3">
+            {people.map((p) => {
+              const receivable = p.accounts.find((a) => a.type === "RECEIVABLE");
+              const payable = p.accounts.find((a) => a.type === "PAYABLE");
+              const isOpen = expanded === p._id;
+              const isRemoving = removingId === p._id;
+              return (
+                <div key={p._id} className="bg-surface border border-border shadow-card rounded-xl overflow-hidden">
+                  <div
+                    className="p-4 cursor-pointer"
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => setExpanded(isOpen ? null : p._id)}
+                    onKeyDown={(e) => e.key === "Enter" && setExpanded(isOpen ? null : p._id)}
+                  >
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="font-bold">{p.name}</span>
+                      <div className="flex items-center gap-3">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setActivePerson({ ...p, receivable, payable });
+                          }}
+                          className="flex items-center gap-1 text-sm text-accent-ink font-semibold"
+                        >
+                          <Plus size={15} strokeWidth={2.5} /> Entry
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleRemovePerson(p);
+                          }}
+                          disabled={isRemoving}
+                          aria-label={`Remove ${p.name}`}
+                          className="text-ink-faint hover:text-bad disabled:opacity-40"
+                        >
+                          {isRemoving ? <Spinner size={15} /> : <Trash2 size={15} />}
+                        </button>
+                        <ChevronDown
+                          size={18}
+                          aria-hidden="true"
+                          className={`text-ink-faint transition-transform ${isOpen ? "rotate-180" : ""}`}
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <div className="text-xs text-ink-faint font-medium mb-0.5">They owe you</div>
+                        <div className="font-bold text-good tabular-nums">{money(receivable?.balance || 0)}</div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-ink-faint font-medium mb-0.5">You owe them</div>
+                        <div className="font-bold text-bad tabular-nums">{money(payable?.balance || 0)}</div>
+                      </div>
+                    </div>
+                  </div>
+                  {isOpen && (
+                    <PersonHistory
+                      key={historyKey}
+                      person={{ ...p, receivable, payable }}
+                      onEdit={(tx) => setEditing({ person: { ...p, receivable, payable }, tx })}
+                      onChanged={load}
+                    />
+                  )}
+                </div>
+              );
+            })}
+            {people.length === 0 && (
+              <p className="text-sm text-ink-faint text-center py-6">Add someone above to start tracking what you lend or borrow.</p>
+            )}
+          </div>
+        </>
+      )}
 
       {activePerson && (
         <EntryForm

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Plus, TrendingUp, TrendingDown, ArrowLeftRight, Pencil, Trash2 } from "lucide-react";
 import api from "../api/client.js";
 import AddTransactionModal from "../components/AddTransactionModal.jsx";
+import Spinner from "../components/Spinner.jsx";
 
 const money = (n) => `Rs ${Math.round(n).toLocaleString("en-PK")}`;
 
@@ -17,8 +18,10 @@ export default function Transactions() {
   const [accounts, setAccounts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [people, setPeople] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
   const [editingTx, setEditingTx] = useState(null);
+  const [deletingId, setDeletingId] = useState(null);
 
   async function loadAll() {
     const [txRes, accountsRes, categoriesRes, peopleRes] = await Promise.all([
@@ -40,13 +43,18 @@ export default function Transactions() {
   }
 
   useEffect(() => {
-    loadAll();
+    loadAll().finally(() => setLoading(false));
   }, []);
 
   async function handleDelete(tx) {
     if (!window.confirm(`Delete "${tx.title}" (${money(tx.amount)})? This can't be undone.`)) return;
-    await api.delete(`/transactions/${tx._id}`);
-    loadAll();
+    setDeletingId(tx._id);
+    try {
+      await api.delete(`/transactions/${tx._id}`);
+      await loadAll();
+    } finally {
+      setDeletingId(null);
+    }
   }
 
   const walletAccounts = accounts.filter((a) => !["RECEIVABLE", "PAYABLE"].includes(a.type));
@@ -66,47 +74,56 @@ export default function Transactions() {
         </button>
       </div>
 
-      <div className="bg-surface border border-border shadow-card rounded-xl divide-y divide-border">
-        {transactions.map((tx) => {
-          const meta = TYPE_META[tx.type];
-          return (
-            <div key={tx._id} className="flex items-center gap-3 px-4 py-3.5">
-              <div className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 ${meta.className}`}>
-                <meta.icon size={16} strokeWidth={2.5} />
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="font-semibold text-sm truncate">{tx.title}</div>
-                <div className="text-xs text-ink-faint mt-0.5 truncate">
-                  {tx.category?.name}
-                  {tx.person?.name && ` · ${tx.person.name}`}
-                  {" · "}
-                  {new Date(tx.date).toLocaleDateString("en-PK", { day: "numeric", month: "short", year: "numeric" })}
+      {loading ? (
+        <div className="flex items-center justify-center py-16 text-ink-faint">
+          <Spinner size={22} />
+        </div>
+      ) : (
+        <div className="bg-surface border border-border shadow-card rounded-xl divide-y divide-border">
+          {transactions.map((tx) => {
+            const meta = TYPE_META[tx.type];
+            const isDeleting = deletingId === tx._id;
+            return (
+              <div key={tx._id} className="flex items-center gap-3 px-4 py-3.5">
+                <div className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 ${meta.className}`}>
+                  <meta.icon size={16} strokeWidth={2.5} />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="font-semibold text-sm truncate">{tx.title}</div>
+                  <div className="text-xs text-ink-faint mt-0.5 truncate">
+                    {tx.category?.name}
+                    {tx.person?.name && ` · ${tx.person.name}`}
+                    {" · "}
+                    {new Date(tx.date).toLocaleDateString("en-PK", { day: "numeric", month: "short", year: "numeric" })}
+                  </div>
+                </div>
+                <span className="font-bold tabular-nums shrink-0">{money(tx.amount)}</span>
+                <div className="flex items-center gap-2.5 shrink-0">
+                  <button
+                    onClick={() => setEditingTx(tx)}
+                    disabled={isDeleting}
+                    aria-label="Edit transaction"
+                    className="text-ink-faint hover:text-accent-ink transition-colors disabled:opacity-40"
+                  >
+                    <Pencil size={15} />
+                  </button>
+                  <button
+                    onClick={() => handleDelete(tx)}
+                    disabled={isDeleting}
+                    aria-label="Delete transaction"
+                    className="text-ink-faint hover:text-bad transition-colors disabled:opacity-40"
+                  >
+                    {isDeleting ? <Spinner size={16} /> : <Trash2 size={16} />}
+                  </button>
                 </div>
               </div>
-              <span className="font-bold tabular-nums shrink-0">{money(tx.amount)}</span>
-              <div className="flex items-center gap-2.5 shrink-0">
-                <button
-                  onClick={() => setEditingTx(tx)}
-                  aria-label="Edit transaction"
-                  className="text-ink-faint hover:text-accent-ink transition-colors"
-                >
-                  <Pencil size={15} />
-                </button>
-                <button
-                  onClick={() => handleDelete(tx)}
-                  aria-label="Delete transaction"
-                  className="text-ink-faint hover:text-bad transition-colors"
-                >
-                  <Trash2 size={16} />
-                </button>
-              </div>
-            </div>
-          );
-        })}
-        {transactions.length === 0 && (
-          <p className="px-4 py-8 text-sm text-ink-faint text-center">No transactions yet — tap Add to record one.</p>
-        )}
-      </div>
+            );
+          })}
+          {transactions.length === 0 && (
+            <p className="px-4 py-8 text-sm text-ink-faint text-center">No transactions yet — tap Add to record one.</p>
+          )}
+        </div>
+      )}
 
       <button
         onClick={() => setShowAdd(true)}

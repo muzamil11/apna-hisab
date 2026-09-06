@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext.jsx";
+import Spinner from "../components/Spinner.jsx";
 
 export default function Login() {
   const { login } = useAuth();
@@ -52,8 +53,9 @@ export default function Login() {
         <button
           type="submit"
           disabled={loading}
-          className="w-full bg-accent hover:bg-accent-ink text-white font-semibold py-2.5 rounded-lg transition-colors disabled:opacity-50"
+          className="w-full flex items-center justify-center gap-2 bg-accent hover:bg-accent-ink text-white font-semibold py-2.5 rounded-lg transition-colors disabled:opacity-50"
         >
+          {loading && <Spinner />}
           {loading ? "Signing in…" : "Sign in"}
         </button>
       </form>

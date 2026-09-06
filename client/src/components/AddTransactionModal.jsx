@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { TrendingUp, TrendingDown, ArrowLeftRight, X } from "lucide-react";
 import api from "../api/client.js";
+import Spinner from "./Spinner.jsx";
 
 const TYPES = [
   { key: "INCOME", label: "Income", hint: "Money came in — salary, rent, freelance", icon: TrendingUp, tone: "good" },
@@ -202,8 +203,9 @@ export default function AddTransactionModal({ accounts, categories, people, edit
           <button
             type="submit"
             disabled={saving}
-            className="w-full bg-accent hover:bg-accent-ink text-white font-semibold py-3 rounded-lg transition-colors disabled:opacity-50"
+            className="w-full flex items-center justify-center gap-2 bg-accent hover:bg-accent-ink text-white font-semibold py-3 rounded-lg transition-colors disabled:opacity-50"
           >
+            {saving && <Spinner />}
             {saving ? "Saving…" : editingTx ? "Save changes" : "Save"}
           </button>
         </form>
