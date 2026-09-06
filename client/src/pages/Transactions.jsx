@@ -99,14 +99,16 @@ export default function Transactions() {
                 </div>
                 <span className="font-bold tabular-nums shrink-0">{money(tx.amount)}</span>
                 <div className="flex items-center gap-2.5 shrink-0">
-                  <button
-                    onClick={() => setEditingTx(tx)}
-                    disabled={isDeleting}
-                    aria-label="Edit transaction"
-                    className="text-ink-faint hover:text-accent-ink transition-colors disabled:opacity-40"
-                  >
-                    <Pencil size={15} />
-                  </button>
+                  {tx.type !== "REVALUATION" && (
+                    <button
+                      onClick={() => setEditingTx(tx)}
+                      disabled={isDeleting}
+                      aria-label="Edit transaction"
+                      className="text-ink-faint hover:text-accent-ink transition-colors disabled:opacity-40"
+                    >
+                      <Pencil size={15} />
+                    </button>
+                  )}
                   <button
                     onClick={() => handleDelete(tx)}
                     disabled={isDeleting}

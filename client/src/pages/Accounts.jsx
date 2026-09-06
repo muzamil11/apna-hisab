@@ -170,6 +170,291 @@ function ContributeForm({ goal, cashAccounts, onClose, onDone }) {
   );
 }
 
+function InvestContributeForm({ account, cashAccounts, onClose, onDone }) {
+  const [amount, setAmount] = useState("");
+  const [isPast, setIsPast] = useState(false);
+  const [fromAccount, setFromAccount] = useState(cashAccounts[0]?._id || "");
+  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [note, setNote] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  async function submit(e) {
+    e.preventDefault();
+    if (!amount || (!isPast && !fromAccount)) return;
+    setSaving(true);
+    try {
+      const payload = isPast
+        ? {
+            type: "INCOME",
+            amount: Number(amount),
+            title: `${account.name} — contribution`,
+            toAccount: account._id,
+            date,
+            note,
+          }
+        : {
+            type: "TRANSFER",
+            amount: Number(amount),
+            title: `${account.name} — contribution`,
+            fromAccount,
+            toAccount: account._id,
+            date,
+            note,
+          };
+      await api.post("/transactions", payload);
+      onDone();
+      onClose();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-ink/40 flex items-end md:items-center justify-center z-50">
+      <form onSubmit={submit} className="bg-surface w-full md:max-w-sm md:rounded-2xl rounded-t-2xl p-6 space-y-4 max-h-[92vh] overflow-y-auto">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-bold tracking-tight">Add money — {account.name}</h2>
+          <button type="button" onClick={onClose} aria-label="Close" className="text-ink-faint hover:text-ink">
+            <X size={20} />
+          </button>
+        </div>
+        <input
+          autoFocus
+          type="number"
+          inputMode="decimal"
+          placeholder="Amount"
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+          className={`${inputClass} w-full text-xl font-bold tabular-nums`}
+        />
+        <label className="flex items-start gap-2.5 text-sm text-ink-muted bg-canvas rounded-lg px-3.5 py-3 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={isPast}
+            onChange={(e) => setIsPast(e.target.checked)}
+            className="mt-0.5 accent-accent"
+          />
+          <span>This is money from before you started tracking — don't take it out of a wallet.</span>
+        </label>
+        {!isPast && (
+          <select value={fromAccount} onChange={(e) => setFromAccount(e.target.value)} className={`${inputClass} w-full`}>
+            {cashAccounts.map((a) => (
+              <option key={a._id} value={a._id}>
+                From {a.name}
+              </option>
+            ))}
+          </select>
+        )}
+        <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={`${inputClass} w-full`} />
+        <textarea
+          placeholder="Note (optional)"
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          className={`${inputClass} w-full text-sm`}
+          rows={2}
+        />
+        <button
+          type="submit"
+          disabled={saving}
+          className="w-full flex items-center justify-center gap-2 bg-accent hover:bg-accent-ink text-white font-semibold py-2.5 rounded-lg transition-colors disabled:opacity-50"
+        >
+          {saving && <Spinner />}
+          {saving ? "Saving…" : "Add"}
+        </button>
+      </form>
+    </div>
+  );
+}
+
+function InvestWithdrawForm({ account, cashAccounts, onClose, onDone }) {
+  const [amount, setAmount] = useState("");
+  const [isPast, setIsPast] = useState(false);
+  const [toAccount, setToAccount] = useState(cashAccounts[0]?._id || "");
+  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [note, setNote] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  async function submit(e) {
+    e.preventDefault();
+    if (!amount || (!isPast && !toAccount)) return;
+    setSaving(true);
+    try {
+      // Always a Transfer, never an Expense — this is money you already
+      // collected, not spending. An Expense here would wrongly inflate
+      // "spent this month" and pollute the spending-by-category chart, even
+      // though nothing was actually bought.
+      const payload = {
+        type: "TRANSFER",
+        amount: Number(amount),
+        title: `${account.name} — withdrawal`,
+        fromAccount: account._id,
+        toAccount: isPast ? undefined : toAccount,
+        date,
+        note,
+      };
+      await api.post("/transactions", payload);
+      onDone();
+      onClose();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-ink/40 flex items-end md:items-center justify-center z-50">
+      <form onSubmit={submit} className="bg-surface w-full md:max-w-sm md:rounded-2xl rounded-t-2xl p-6 space-y-4 max-h-[92vh] overflow-y-auto">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-bold tracking-tight">Withdraw — {account.name}</h2>
+          <button type="button" onClick={onClose} aria-label="Close" className="text-ink-faint hover:text-ink">
+            <X size={20} />
+          </button>
+        </div>
+        <input
+          autoFocus
+          type="number"
+          inputMode="decimal"
+          placeholder="Amount"
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+          className={`${inputClass} w-full text-xl font-bold tabular-nums`}
+        />
+        <label className="flex items-start gap-2.5 text-sm text-ink-muted bg-canvas rounded-lg px-3.5 py-3 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={isPast}
+            onChange={(e) => setIsPast(e.target.checked)}
+            className="mt-0.5 accent-accent"
+          />
+          <span>You already received this before tracking — don't add it into a wallet.</span>
+        </label>
+        {!isPast && (
+          <select value={toAccount} onChange={(e) => setToAccount(e.target.value)} className={`${inputClass} w-full`}>
+            {cashAccounts.map((a) => (
+              <option key={a._id} value={a._id}>
+                Into {a.name}
+              </option>
+            ))}
+          </select>
+        )}
+        <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={`${inputClass} w-full`} />
+        <textarea
+          placeholder="Note (optional)"
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          className={`${inputClass} w-full text-sm`}
+          rows={2}
+        />
+        <button
+          type="submit"
+          disabled={saving}
+          className="w-full flex items-center justify-center gap-2 bg-accent hover:bg-accent-ink text-white font-semibold py-2.5 rounded-lg transition-colors disabled:opacity-50"
+        >
+          {saving && <Spinner />}
+          {saving ? "Saving…" : "Withdraw"}
+        </button>
+      </form>
+    </div>
+  );
+}
+
+function ValueUpdateForm({ account, editingTx, onClose, onDone }) {
+  const editWasGain = editingTx ? String(editingTx.toAccount?._id || editingTx.toAccount) === account._id : true;
+  const [direction, setDirection] = useState(editWasGain ? "gain" : "loss");
+  const [amount, setAmount] = useState(editingTx ? String(editingTx.amount) : "");
+  const [date, setDate] = useState(editingTx ? editingTx.date.slice(0, 10) : new Date().toISOString().slice(0, 10));
+  const [note, setNote] = useState(editingTx?.note || "");
+  const [saving, setSaving] = useState(false);
+
+  async function submit(e) {
+    e.preventDefault();
+    if (!amount) return;
+    setSaving(true);
+    try {
+      const payload = {
+        type: "REVALUATION",
+        amount: Number(amount),
+        title: `${account.name} — value ${direction === "gain" ? "increased" : "decreased"}`,
+        date,
+        note,
+        [direction === "gain" ? "toAccount" : "fromAccount"]: account._id,
+      };
+      if (editingTx) {
+        // Editing replays as delete-then-recreate, matching every other
+        // edit flow in the app — no separate "diff the ledger" logic needed.
+        await api.delete(`/transactions/${editingTx._id}`);
+      }
+      await api.post("/transactions", payload);
+      onDone();
+      onClose();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-ink/40 flex items-end md:items-center justify-center z-50">
+      <form onSubmit={submit} className="bg-surface w-full md:max-w-sm md:rounded-2xl rounded-t-2xl p-6 space-y-4 max-h-[92vh] overflow-y-auto">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-bold tracking-tight">
+            {editingTx ? "Edit" : "Update value"} — {account.name}
+          </h2>
+          <button type="button" onClick={onClose} aria-label="Close" className="text-ink-faint hover:text-ink">
+            <X size={20} />
+          </button>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={() => setDirection("gain")}
+            className={`py-2.5 rounded-lg text-sm font-semibold border transition-colors ${
+              direction === "gain" ? "border-good bg-good-soft text-good" : "border-border text-ink-muted"
+            }`}
+          >
+            Profit
+          </button>
+          <button
+            type="button"
+            onClick={() => setDirection("loss")}
+            className={`py-2.5 rounded-lg text-sm font-semibold border transition-colors ${
+              direction === "loss" ? "border-bad bg-bad-soft text-bad" : "border-border text-ink-muted"
+            }`}
+          >
+            Loss
+          </button>
+        </div>
+        <input
+          autoFocus
+          type="number"
+          inputMode="decimal"
+          placeholder="How much?"
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+          className={`${inputClass} w-full text-xl font-bold tabular-nums`}
+        />
+        <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={`${inputClass} w-full`} />
+        <textarea
+          placeholder="Note (optional)"
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          className={`${inputClass} w-full text-sm`}
+          rows={2}
+        />
+        <button
+          type="submit"
+          disabled={saving}
+          className="w-full flex items-center justify-center gap-2 bg-accent hover:bg-accent-ink text-white font-semibold py-2.5 rounded-lg transition-colors disabled:opacity-50"
+        >
+          {saving && <Spinner />}
+          {saving ? "Saving…" : editingTx ? "Save changes" : "Save"}
+        </button>
+        <p className="text-xs text-ink-faint text-center">
+          This just marks the value change — no wallet is touched, and it won't count as income or spending anywhere.
+        </p>
+      </form>
+    </div>
+  );
+}
+
 function StatementHistory({ cardId }) {
   const [statements, setStatements] = useState(null);
 
@@ -340,10 +625,12 @@ export default function Accounts() {
   const [creditLimit, setCreditLimit] = useState("");
   const [targetAmount, setTargetAmount] = useState("");
   const [targetDate, setTargetDate] = useState("");
-  const [investedAmount, setInvestedAmount] = useState("");
   const [adding, setAdding] = useState(false);
   const [payingCard, setPayingCard] = useState(null);
   const [contributingGoal, setContributingGoal] = useState(null);
+  const [contributingInvestment, setContributingInvestment] = useState(null);
+  const [withdrawingFrom, setWithdrawingFrom] = useState(null);
+  const [valueUpdateFor, setValueUpdateFor] = useState(null); // { account, editingTx }
   const [expandedCard, setExpandedCard] = useState(null);
   const [categories, setCategories] = useState([]);
   const [people, setPeople] = useState([]);
@@ -356,9 +643,6 @@ export default function Accounts() {
   const [renamingId, setRenamingId] = useState(null);
   const [renameValue, setRenameValue] = useState("");
   const [renaming, setRenaming] = useState(false);
-  const [editingInvestedId, setEditingInvestedId] = useState(null);
-  const [investedValue, setInvestedValue] = useState("");
-  const [savingInvested, setSavingInvested] = useState(false);
 
   async function load() {
     const [accountsRes, categoriesRes, peopleRes, closedRes] = await Promise.all([
@@ -421,18 +705,6 @@ export default function Accounts() {
     }
   }
 
-  async function handleSaveInvested(account) {
-    const value = investedValue === "" ? null : Number(investedValue);
-    setSavingInvested(true);
-    try {
-      await api.patch(`/accounts/${account._id}`, { investedAmount: value });
-      setEditingInvestedId(null);
-      await load();
-    } finally {
-      setSavingInvested(false);
-    }
-  }
-
   async function handleAdd(e) {
     e.preventDefault();
     if (!name) return;
@@ -445,8 +717,6 @@ export default function Accounts() {
       };
     } else if (type === "GOAL") {
       meta = { targetAmount: Number(targetAmount) || undefined, targetDate: targetDate || undefined };
-    } else if (type === "INVESTMENT" && investedAmount) {
-      meta = { investedAmount: Number(investedAmount) };
     }
     setAdding(true);
     try {
@@ -463,7 +733,6 @@ export default function Accounts() {
       setCreditLimit("");
       setTargetAmount("");
       setTargetDate("");
-      setInvestedAmount("");
       await load();
     } finally {
       setAdding(false);
@@ -525,20 +794,15 @@ export default function Accounts() {
             />
           </div>
         )}
-        {type === "INVESTMENT" && (
-          <input
-            type="number"
-            placeholder="Total invested / cost basis (optional — shows profit/loss %)"
-            value={investedAmount}
-            onChange={(e) => setInvestedAmount(e.target.value)}
-            className={`${inputClass} w-full`}
-          />
-        )}
         <div className="flex flex-wrap items-center gap-3">
           {type !== "GOAL" && (
             <input
               type="number"
-              placeholder="Starting balance (optional, if it isn't zero today)"
+              placeholder={
+                type === "INVESTMENT" || type === "ASSET_OTHER"
+                  ? "Current value (optional — counts as your first contribution)"
+                  : "Starting balance (optional, if it isn't zero today)"
+              }
               value={startingBalance}
               onChange={(e) => setStartingBalance(e.target.value)}
               className={`${inputClass} flex-1 min-w-[220px]`}
@@ -565,14 +829,11 @@ export default function Accounts() {
             const Icon = iconFor(a.type);
             const goalPct =
               a.type === "GOAL" && a.meta?.targetAmount ? Math.min(100, (a.balance / a.meta.targetAmount) * 100) : null;
-            const invested = a.type === "INVESTMENT" ? a.meta?.investedAmount : null;
-            const profitAmount = a.investmentSummary?.profit ?? null;
-            const profitPct = a.investmentSummary?.profitPct ?? null;
+            const isTracked = a.type === "INVESTMENT" || a.type === "ASSET_OTHER";
             const isCardOpen = expandedCard === a._id;
             const isHistoryOpen = expandedId === a._id;
             const isArchiving = archivingId === a._id;
             const isRenaming = renamingId === a._id;
-            const isEditingInvested = editingInvestedId === a._id;
             return (
               <div key={a._id} className="bg-surface border border-border shadow-card rounded-xl overflow-hidden">
                 <div
@@ -672,66 +933,42 @@ export default function Accounts() {
                   </div>
                 )}
 
-                {a.type === "INVESTMENT" && (
-                  <div
-                    className="px-4 pb-4 -mt-1 pt-3 border-t border-border flex items-center justify-between gap-2 text-xs"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    {isEditingInvested ? (
-                      <div className="flex items-center gap-1.5 flex-1">
-                        <span className="text-ink-faint shrink-0">Invested Rs</span>
-                        <input
-                          autoFocus
-                          type="number"
-                          value={investedValue}
-                          onChange={(e) => setInvestedValue(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") handleSaveInvested(a);
-                            if (e.key === "Escape") setEditingInvestedId(null);
-                          }}
-                          className="min-w-0 flex-1 border border-accent rounded px-1.5 py-0.5 text-xs outline-none"
-                        />
-                        <button
-                          onClick={() => handleSaveInvested(a)}
-                          disabled={savingInvested}
-                          aria-label="Save invested amount"
-                          className="text-accent-ink shrink-0 disabled:opacity-40"
+                {isTracked && (
+                  <div className="px-4 pb-4 -mt-1 pt-3 border-t border-border space-y-2" onClick={(e) => e.stopPropagation()}>
+                    {a.investmentSummary ? (
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-ink-faint">Invested {money(a.investmentSummary.invested)}</span>
+                        <span
+                          className={`font-bold tabular-nums ${a.investmentSummary.profit >= 0 ? "text-good" : "text-bad"}`}
                         >
-                          {savingInvested ? <Spinner size={13} /> : <Check size={13} />}
-                        </button>
+                          {a.investmentSummary.profit >= 0 ? "+" : ""}
+                          {money(a.investmentSummary.profit)} ({a.investmentSummary.profitPct >= 0 ? "+" : ""}
+                          {a.investmentSummary.profitPct.toFixed(1)}%)
+                        </span>
                       </div>
-                    ) : invested ? (
-                      <>
-                        <span className="text-ink-faint">
-                          Invested {money(invested)}
-                          <button
-                            onClick={() => {
-                              setEditingInvestedId(a._id);
-                              setInvestedValue(String(invested));
-                            }}
-                            aria-label="Edit invested amount"
-                            className="text-ink-faint hover:text-accent-ink ml-1.5 align-middle"
-                          >
-                            <Pencil size={11} className="inline" />
-                          </button>
-                        </span>
-                        <span className={`font-bold tabular-nums ${profitAmount >= 0 ? "text-good" : "text-bad"}`}>
-                          {profitAmount >= 0 ? "+" : ""}
-                          {money(profitAmount)} ({profitPct >= 0 ? "+" : ""}
-                          {profitPct.toFixed(1)}%)
-                        </span>
-                      </>
                     ) : (
-                      <button
-                        onClick={() => {
-                          setEditingInvestedId(a._id);
-                          setInvestedValue("");
-                        }}
-                        className="text-accent-ink font-medium"
-                      >
-                        + Add invested amount to track profit/loss %
-                      </button>
+                      <p className="text-xs text-ink-faint">No contributions logged yet.</p>
                     )}
+                    <div className="grid grid-cols-3 gap-2">
+                      <button
+                        onClick={() => setContributingInvestment(a)}
+                        className="text-xs font-semibold text-accent-ink bg-accent-soft hover:bg-accent-soft/70 rounded-lg py-2 transition-colors"
+                      >
+                        + Add money
+                      </button>
+                      <button
+                        onClick={() => setValueUpdateFor({ account: a, editingTx: null })}
+                        className="text-xs font-semibold text-ink-muted bg-canvas hover:bg-border/60 rounded-lg py-2 transition-colors"
+                      >
+                        Update value
+                      </button>
+                      <button
+                        onClick={() => setWithdrawingFrom(a)}
+                        className="text-xs font-semibold text-ink-muted bg-canvas hover:bg-border/60 rounded-lg py-2 transition-colors"
+                      >
+                        Withdraw
+                      </button>
+                    </div>
                   </div>
                 )}
 
@@ -803,7 +1040,9 @@ export default function Accounts() {
                   <AccountHistory
                     key={historyKey}
                     account={a}
-                    onEdit={(tx) => setEditingTx(tx)}
+                    onEdit={(tx) =>
+                      tx.type === "REVALUATION" ? setValueUpdateFor({ account: a, editingTx: tx }) : setEditingTx(tx)
+                    }
                     onChanged={load}
                   />
                 )}
@@ -870,7 +1109,14 @@ export default function Accounts() {
                       />
                     </div>
                     {isHistoryOpen && (
-                      <AccountHistory key={historyKey} account={a} onEdit={(tx) => setEditingTx(tx)} onChanged={load} />
+                      <AccountHistory
+                        key={historyKey}
+                        account={a}
+                        onEdit={(tx) =>
+                          tx.type === "REVALUATION" ? setValueUpdateFor({ account: a, editingTx: tx }) : setEditingTx(tx)
+                        }
+                        onChanged={load}
+                      />
                     )}
                   </div>
                 );
@@ -889,6 +1135,39 @@ export default function Accounts() {
           cashAccounts={cashAccounts}
           onClose={() => setContributingGoal(null)}
           onDone={load}
+        />
+      )}
+      {contributingInvestment && (
+        <InvestContributeForm
+          account={contributingInvestment}
+          cashAccounts={cashAccounts}
+          onClose={() => setContributingInvestment(null)}
+          onDone={() => {
+            load();
+            setHistoryKey((k) => k + 1);
+          }}
+        />
+      )}
+      {withdrawingFrom && (
+        <InvestWithdrawForm
+          account={withdrawingFrom}
+          cashAccounts={cashAccounts}
+          onClose={() => setWithdrawingFrom(null)}
+          onDone={() => {
+            load();
+            setHistoryKey((k) => k + 1);
+          }}
+        />
+      )}
+      {valueUpdateFor && (
+        <ValueUpdateForm
+          account={valueUpdateFor.account}
+          editingTx={valueUpdateFor.editingTx}
+          onClose={() => setValueUpdateFor(null)}
+          onDone={() => {
+            load();
+            setHistoryKey((k) => k + 1);
+          }}
         />
       )}
 

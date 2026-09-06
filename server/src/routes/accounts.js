@@ -4,31 +4,29 @@ import Transaction from "../models/Transaction.js";
 import { requireAuth } from "../middleware/auth.js";
 import { getNetWorth, recomputeAccountBalance, applyTransactionEffects } from "../utils/ledger.js";
 import { getCardSummary, getStatementHistory } from "../utils/creditCard.js";
+import { getInvestmentSummary } from "../utils/investment.js";
 
 const router = Router();
 router.use(requireAuth);
+
+const TRACKED_INVESTMENT_TYPES = new Set(["INVESTMENT", "ASSET_OTHER"]);
 
 async function withSummary(account) {
   if (account.type === "CREDIT_CARD") {
     const cardSummary = await getCardSummary(Transaction, account);
     return { ...account.toObject(), cardSummary };
   }
-  if (account.type === "INVESTMENT" && account.meta?.investedAmount) {
-    // Current balance alone understates profit once money has actually been
-    // withdrawn/received from an investment (e.g. it matured and paid out)
-    // — total return has to include what already left too, not just what's
-    // still sitting in the account.
-    const [{ total: withdrawn = 0 } = {}] = await Transaction.aggregate([
-      { $match: { fromAccount: account._id } },
-      { $group: { _id: null, total: { $sum: "$amount" } } },
-    ]);
-    const invested = account.meta.investedAmount;
-    const totalValue = account.balance + withdrawn;
-    const profit = totalValue - invested;
-    return {
-      ...account.toObject(),
-      investmentSummary: { invested, withdrawn, totalValue, profit, profitPct: invested ? (profit / invested) * 100 : null },
-    };
+  if (TRACKED_INVESTMENT_TYPES.has(account.type)) {
+    const transactions = await Transaction.find({
+      $or: [{ fromAccount: account._id }, { toAccount: account._id }],
+    }).select("type amount fromAccount toAccount");
+    const investmentSummary = getInvestmentSummary(
+      account._id,
+      transactions,
+      account.balance,
+      account.meta?.investedAmount
+    );
+    return investmentSummary ? { ...account.toObject(), investmentSummary } : account.toObject();
   }
   return account.toObject();
 }
