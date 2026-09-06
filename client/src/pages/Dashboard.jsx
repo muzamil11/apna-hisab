@@ -59,7 +59,19 @@ export default function Dashboard() {
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <StatCard label="Net Worth" value={money(summary.netWorth)} icon={Wallet} />
+        <StatCard
+          label="Net Worth"
+          value={money(summary.netWorth)}
+          icon={Wallet}
+          delta={
+            summary.netWorthLastMonth !== undefined
+              ? {
+                  positive: summary.netWorth >= summary.netWorthLastMonth,
+                  text: `${money(Math.abs(summary.netWorth - summary.netWorthLastMonth))} vs last month`,
+                }
+              : null
+          }
+        />
         <StatCard label="Income this month" value={money(summary.month.income)} tone="good" icon={TrendingUp} />
         <StatCard label="Spent this month" value={money(summary.month.expense)} tone="bad" icon={TrendingDown} />
         <StatCard

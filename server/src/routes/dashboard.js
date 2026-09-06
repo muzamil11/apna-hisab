@@ -3,7 +3,7 @@ import mongoose from "mongoose";
 import Transaction from "../models/Transaction.js";
 import Budget from "../models/Budget.js";
 import { requireAuth } from "../middleware/auth.js";
-import { getNetWorth } from "../utils/ledger.js";
+import { getNetWorth, getNetWorthHistory } from "../utils/ledger.js";
 
 const router = Router();
 router.use(requireAuth);
@@ -14,7 +14,7 @@ router.get("/summary", async (req, res) => {
   const end = new Date(now.getFullYear(), now.getMonth() + 1, 1);
   const userId = new mongoose.Types.ObjectId(req.userId);
 
-  const [totals, byCategory, { netWorth }, budgets] = await Promise.all([
+  const [totals, byCategory, { netWorth }, budgets, history] = await Promise.all([
     Transaction.aggregate([
       { $match: { user: userId, date: { $gte: start, $lt: end }, type: { $in: ["INCOME", "EXPENSE"] } } },
       { $group: { _id: "$type", total: { $sum: "$amount" } } },
@@ -29,6 +29,7 @@ router.get("/summary", async (req, res) => {
     ]),
     getNetWorth(req.userId),
     Budget.find({ user: req.userId }).populate("category"),
+    getNetWorthHistory(req.userId, 1), // just last month's close, for the "vs last month" delta
   ]);
 
   const income = totals.find((t) => t._id === "INCOME")?.total || 0;
@@ -47,8 +48,15 @@ router.get("/summary", async (req, res) => {
     month: { income, expense, saved: income - expense },
     byCategory,
     netWorth,
+    netWorthLastMonth: history[0].netWorth,
     budgetStatus,
   });
+});
+
+router.get("/networth-history", async (req, res) => {
+  const months = Math.min(24, Math.max(1, Number(req.query.months) || 6));
+  const points = await getNetWorthHistory(req.userId, months);
+  res.json(points);
 });
 
 export default router;

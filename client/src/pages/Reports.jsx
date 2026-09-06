@@ -1,7 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
+import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
+import { ArrowUp, ArrowDown } from "lucide-react";
 import api from "../api/client.js";
 
 const money = (n) => `Rs ${Math.round(n).toLocaleString("en-PK")}`;
+const shortMoney = (n) => {
+  const abs = Math.abs(n);
+  if (abs >= 100000) return `${(n / 100000).toFixed(1)}L`;
+  if (abs >= 1000) return `${(n / 1000).toFixed(0)}k`;
+  return `${n}`;
+};
 
 function rangeFor(period) {
   const now = new Date();
@@ -25,6 +33,7 @@ const PERIODS = [
 export default function Reports() {
   const [period, setPeriod] = useState("month");
   const [transactions, setTransactions] = useState([]);
+  const [netWorthHistory, setNetWorthHistory] = useState([]);
 
   useEffect(() => {
     const { from, to } = rangeFor(period);
@@ -32,6 +41,17 @@ export default function Reports() {
       .get("/transactions", { params: { from, to, limit: 2000 } })
       .then((res) => setTransactions(res.data.transactions));
   }, [period]);
+
+  useEffect(() => {
+    api.get("/dashboard/networth-history", { params: { months: 6 } }).then((res) => {
+      setNetWorthHistory(
+        res.data.map((p, i, arr) => ({
+          label: i === arr.length - 1 ? "Today" : new Date(p.date).toLocaleDateString("en-PK", { month: "short" }),
+          netWorth: p.netWorth,
+        }))
+      );
+    });
+  }, []);
 
   const stats = useMemo(() => {
     const income = transactions.filter((t) => t.type === "INCOME").reduce((s, t) => s + t.amount, 0);
@@ -49,12 +69,48 @@ export default function Reports() {
     };
   }, [transactions]);
 
+  const netWorthDelta =
+    netWorthHistory.length >= 2
+      ? netWorthHistory[netWorthHistory.length - 1].netWorth - netWorthHistory[netWorthHistory.length - 2].netWorth
+      : null;
+
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Reports</h1>
         <p className="text-sm text-ink-muted mt-0.5">See how money moved over a period.</p>
       </div>
+
+      {netWorthHistory.length > 0 && (
+        <div className="bg-surface border border-border shadow-card rounded-xl p-5">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-semibold text-ink-muted">Net worth trend</h2>
+            {netWorthDelta !== null && (
+              <span
+                className={`flex items-center gap-0.5 text-xs font-bold ${netWorthDelta >= 0 ? "text-good" : "text-bad"}`}
+              >
+                {netWorthDelta >= 0 ? <ArrowUp size={12} strokeWidth={2.5} /> : <ArrowDown size={12} strokeWidth={2.5} />}
+                {money(Math.abs(netWorthDelta))} vs last month
+              </span>
+            )}
+          </div>
+          <ResponsiveContainer width="100%" height={200}>
+            <AreaChart data={netWorthHistory} margin={{ left: -20, right: 10 }}>
+              <defs>
+                <linearGradient id="netWorthFill" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#4F46E5" stopOpacity={0.25} />
+                  <stop offset="100%" stopColor="#4F46E5" stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid vertical={false} stroke="#E2E8F0" />
+              <XAxis dataKey="label" tick={{ fontSize: 11, fill: "#94A3B8" }} axisLine={false} tickLine={false} />
+              <YAxis tickFormatter={shortMoney} tick={{ fontSize: 11, fill: "#94A3B8" }} axisLine={false} tickLine={false} />
+              <Tooltip formatter={(v) => money(v)} />
+              <Area type="monotone" dataKey="netWorth" stroke="#4F46E5" strokeWidth={2} fill="url(#netWorthFill)" />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+      )}
 
       <div className="flex gap-1.5 overflow-x-auto pb-1">
         {PERIODS.map((p) => (
