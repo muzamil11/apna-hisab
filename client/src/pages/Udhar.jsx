@@ -349,7 +349,10 @@ export default function Udhar() {
     }
   }
 
-  const cashAccounts = accounts.filter((a) => a.type === "BANK" || a.type === "CASH");
+  // What you can lend "from" isn't only cash/bank — a settled investment or
+  // other asset can convert straight into a receivable too (e.g. a deal that
+  // matured, where what's left is really "so-and-so still owes me this").
+  const cashAccounts = accounts.filter((a) => ["BANK", "CASH", "INVESTMENT", "ASSET_OTHER"].includes(a.type));
   const inputClass =
     "border border-border rounded-lg px-3.5 py-2.5 outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent transition-shadow bg-surface";
 
