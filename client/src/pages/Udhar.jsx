@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { BarChart, Bar, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts";
-import { Plus, ArrowUpRight, ArrowDownLeft, ChevronDown, X } from "lucide-react";
+import { Plus, ArrowUpRight, ArrowDownLeft, ChevronDown, Pencil, Trash2, X } from "lucide-react";
 import api from "../api/client.js";
 
 const shortMoney = (n) => {
@@ -21,23 +21,32 @@ const ACTIONS = {
   repaidByYou: { label: "You Repaid Them", account: "PAYABLE", direction: "toAccount", sign: -1, tone: "bad" },
 };
 
-function actionForTx(tx, personAccounts) {
+function actionKeyForTx(tx, personAccounts) {
   const receivableId = personAccounts.receivable?._id;
   const payableId = personAccounts.payable?._id;
-  if (tx.toAccount?._id === receivableId) return ACTIONS.lent;
-  if (tx.fromAccount?._id === receivableId) return ACTIONS.repaidToYou;
-  if (tx.fromAccount?._id === payableId) return ACTIONS.borrowed;
-  if (tx.toAccount?._id === payableId) return ACTIONS.repaidByYou;
+  if (tx.toAccount?._id === receivableId) return "lent";
+  if (tx.fromAccount?._id === receivableId) return "repaidToYou";
+  if (tx.fromAccount?._id === payableId) return "borrowed";
+  if (tx.toAccount?._id === payableId) return "repaidByYou";
   return null;
 }
 
-function EntryForm({ person, cashAccounts, onClose, onDone }) {
-  const [action, setAction] = useState("lent");
-  const [amount, setAmount] = useState("");
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
-  const [isExisting, setIsExisting] = useState(false);
-  const [cashAccount, setCashAccount] = useState(cashAccounts[0]?._id || "");
-  const [note, setNote] = useState("");
+function EntryForm({ person, cashAccounts, editingTx, onClose, onDone }) {
+  const personAccounts = { receivable: person.receivable, payable: person.payable };
+  const editKey = editingTx ? actionKeyForTx(editingTx, personAccounts) : null;
+  const editWasExisting = editingTx ? editingTx.type !== "TRANSFER" : false;
+  const editCashAccountId = editingTx
+    ? [editingTx.fromAccount?._id, editingTx.toAccount?._id].find(
+        (id) => id && id !== person.receivable?._id && id !== person.payable?._id
+      )
+    : null;
+
+  const [action, setAction] = useState(editKey || "lent");
+  const [amount, setAmount] = useState(editingTx ? String(editingTx.amount) : "");
+  const [date, setDate] = useState(editingTx ? editingTx.date.slice(0, 10) : new Date().toISOString().slice(0, 10));
+  const [isExisting, setIsExisting] = useState(editWasExisting);
+  const [cashAccount, setCashAccount] = useState(editCashAccountId || cashAccounts[0]?._id || "");
+  const [note, setNote] = useState(editingTx?.note || "");
   const [saving, setSaving] = useState(false);
 
   async function submit(e) {
@@ -67,6 +76,12 @@ function EntryForm({ person, cashAccounts, onClose, onDone }) {
       payload[direction === "fromAccount" ? "toAccount" : "fromAccount"] = cashAccount;
     }
 
+    if (editingTx) {
+      // Editing replays as delete-then-recreate, so the old entry's effects
+      // are cleanly reversed before the new ones are applied — no special
+      // "diff the ledger" logic needed.
+      await api.delete(`/transactions/${editingTx._id}`);
+    }
     await api.post("/transactions", payload);
     setSaving(false);
     onDone();
@@ -77,7 +92,7 @@ function EntryForm({ person, cashAccounts, onClose, onDone }) {
     <div className="fixed inset-0 bg-ink/40 flex items-end md:items-center justify-center z-50">
       <form onSubmit={submit} className="bg-surface w-full md:max-w-md md:rounded-2xl rounded-t-2xl p-6 space-y-4 max-h-[92vh] overflow-y-auto">
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-bold tracking-tight">{person.name}</h2>
+          <h2 className="text-lg font-bold tracking-tight">{editingTx ? `Edit — ${person.name}` : person.name}</h2>
           <button type="button" onClick={onClose} aria-label="Close" className="text-ink-faint hover:text-ink">
             <X size={20} />
           </button>
@@ -154,29 +169,41 @@ function EntryForm({ person, cashAccounts, onClose, onDone }) {
           disabled={saving}
           className="w-full bg-accent hover:bg-accent-ink text-white font-semibold py-3 rounded-lg transition-colors disabled:opacity-50"
         >
-          {saving ? "Saving…" : "Save"}
+          {saving ? "Saving…" : editingTx ? "Save changes" : "Save"}
         </button>
       </form>
     </div>
   );
 }
 
-function PersonHistory({ person }) {
+function PersonHistory({ person, onEdit, onChanged }) {
   const [entries, setEntries] = useState([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(0);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
+  function reload() {
     setLoading(true);
-    api
+    return api
       .get("/transactions", { params: { person: person._id, limit: PAGE_SIZE, skip: page * PAGE_SIZE } })
       .then((res) => {
         setEntries(res.data.transactions);
         setTotal(res.data.total);
       })
       .finally(() => setLoading(false));
+  }
+
+  useEffect(() => {
+    reload();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [person._id, page]);
+
+  async function handleDelete(tx) {
+    if (!window.confirm(`Delete "${tx.title}" (${money(tx.amount)})? This can't be undone.`)) return;
+    await api.delete(`/transactions/${tx._id}`);
+    await reload();
+    onChanged();
+  }
 
   const personAccounts = { receivable: person.receivable, payable: person.payable };
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
@@ -185,12 +212,13 @@ function PersonHistory({ person }) {
     <div className="border-t border-border px-4 py-3 bg-canvas/50">
       {loading && <p className="text-sm text-ink-faint py-2">Loading…</p>}
       {!loading && entries.length === 0 && <p className="text-sm text-ink-faint py-2">No entries yet.</p>}
-      <div className="space-y-2">
+      <div className="space-y-1">
         {entries.map((tx) => {
-          const action = actionForTx(tx, personAccounts);
+          const key = actionKeyForTx(tx, personAccounts);
+          const action = key && ACTIONS[key];
           if (!action) return null;
           return (
-            <div key={tx._id} className="flex items-center gap-3 py-1.5">
+            <div key={tx._id} className="group flex items-center gap-3 py-1.5">
               <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${action.tone === "good" ? "bg-good-soft text-good" : "bg-bad-soft text-bad"}`}>
                 {action.sign > 0 ? <ArrowDownLeft size={14} strokeWidth={2.5} /> : <ArrowUpRight size={14} strokeWidth={2.5} />}
               </div>
@@ -205,6 +233,22 @@ function PersonHistory({ person }) {
                 {action.sign > 0 ? "+" : "−"}
                 {money(tx.amount)}
               </span>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  onClick={() => onEdit(tx)}
+                  aria-label="Edit entry"
+                  className="text-ink-faint hover:text-accent-ink"
+                >
+                  <Pencil size={14} />
+                </button>
+                <button
+                  onClick={() => handleDelete(tx)}
+                  aria-label="Delete entry"
+                  className="text-ink-faint hover:text-bad"
+                >
+                  <Trash2 size={14} />
+                </button>
+              </div>
             </div>
           );
         })}
@@ -239,7 +283,9 @@ export default function Udhar() {
   const [accounts, setAccounts] = useState([]);
   const [name, setName] = useState("");
   const [activePerson, setActivePerson] = useState(null);
+  const [editing, setEditing] = useState(null); // { person, tx }
   const [expanded, setExpanded] = useState(null);
+  const [historyKey, setHistoryKey] = useState(0);
 
   async function load() {
     const [peopleRes, accountsRes] = await Promise.all([api.get("/people"), api.get("/accounts")]);
@@ -370,7 +416,14 @@ export default function Udhar() {
                   </div>
                 </div>
               </div>
-              {isOpen && <PersonHistory person={{ ...p, receivable, payable }} />}
+              {isOpen && (
+                <PersonHistory
+                  key={historyKey}
+                  person={{ ...p, receivable, payable }}
+                  onEdit={(tx) => setEditing({ person: { ...p, receivable, payable }, tx })}
+                  onChanged={load}
+                />
+              )}
             </div>
           );
         })}
@@ -385,6 +438,19 @@ export default function Udhar() {
           cashAccounts={cashAccounts}
           onClose={() => setActivePerson(null)}
           onDone={load}
+        />
+      )}
+
+      {editing && (
+        <EntryForm
+          person={editing.person}
+          editingTx={editing.tx}
+          cashAccounts={cashAccounts}
+          onClose={() => setEditing(null)}
+          onDone={() => {
+            load();
+            setHistoryKey((k) => k + 1); // force PersonHistory to refetch its page
+          }}
         />
       )}
     </div>

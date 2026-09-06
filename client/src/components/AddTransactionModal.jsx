@@ -14,16 +14,16 @@ const toneClasses = {
   accent: "border-accent bg-accent-soft text-accent-ink",
 };
 
-export default function AddTransactionModal({ accounts, categories, people, onClose, onCreated }) {
-  const [type, setType] = useState("EXPENSE");
-  const [amount, setAmount] = useState("");
-  const [title, setTitle] = useState("");
-  const [note, setNote] = useState("");
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
-  const [fromAccount, setFromAccount] = useState("");
-  const [toAccount, setToAccount] = useState("");
-  const [category, setCategory] = useState("");
-  const [person, setPerson] = useState("");
+export default function AddTransactionModal({ accounts, categories, people, editingTx, onClose, onCreated }) {
+  const [type, setType] = useState(editingTx?.type || "EXPENSE");
+  const [amount, setAmount] = useState(editingTx ? String(editingTx.amount) : "");
+  const [title, setTitle] = useState(editingTx?.title || "");
+  const [note, setNote] = useState(editingTx?.note || "");
+  const [date, setDate] = useState(editingTx ? editingTx.date.slice(0, 10) : new Date().toISOString().slice(0, 10));
+  const [fromAccount, setFromAccount] = useState(editingTx?.fromAccount?._id || "");
+  const [toAccount, setToAccount] = useState(editingTx?.toAccount?._id || "");
+  const [category, setCategory] = useState(editingTx?.category?._id || "");
+  const [person, setPerson] = useState(editingTx?.person?._id || "");
   const [willBeRepaid, setWillBeRepaid] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -66,6 +66,11 @@ export default function AddTransactionModal({ accounts, categories, people, onCl
             category: type !== "TRANSFER" ? category : undefined,
             person: person || undefined,
           };
+      if (editingTx) {
+        // Editing replays as delete-then-recreate so the old entry's ledger
+        // effects are cleanly reversed before the new ones are applied.
+        await api.delete(`/transactions/${editingTx._id}`);
+      }
       await api.post("/transactions", payload);
       onCreated();
       onClose();
@@ -83,7 +88,7 @@ export default function AddTransactionModal({ accounts, categories, people, onCl
     <div className="fixed inset-0 bg-ink/40 flex items-end md:items-center justify-center z-50 p-0 md:p-4">
       <div className="bg-surface w-full md:max-w-md md:rounded-2xl rounded-t-2xl p-6 max-h-[92vh] overflow-y-auto">
         <div className="flex items-center justify-between mb-5">
-          <h2 className="text-lg font-bold tracking-tight">Add Transaction</h2>
+          <h2 className="text-lg font-bold tracking-tight">{editingTx ? "Edit Transaction" : "Add Transaction"}</h2>
           <button onClick={onClose} aria-label="Close" className="text-ink-faint hover:text-ink transition-colors">
             <X size={20} />
           </button>
@@ -199,7 +204,7 @@ export default function AddTransactionModal({ accounts, categories, people, onCl
             disabled={saving}
             className="w-full bg-accent hover:bg-accent-ink text-white font-semibold py-3 rounded-lg transition-colors disabled:opacity-50"
           >
-            {saving ? "Saving…" : "Save"}
+            {saving ? "Saving…" : editingTx ? "Save changes" : "Save"}
           </button>
         </form>
       </div>

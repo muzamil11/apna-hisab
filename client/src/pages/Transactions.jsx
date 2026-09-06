@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Plus, TrendingUp, TrendingDown, ArrowLeftRight, Trash2 } from "lucide-react";
+import { Plus, TrendingUp, TrendingDown, ArrowLeftRight, Pencil, Trash2 } from "lucide-react";
 import api from "../api/client.js";
 import AddTransactionModal from "../components/AddTransactionModal.jsx";
 
@@ -18,6 +18,7 @@ export default function Transactions() {
   const [categories, setCategories] = useState([]);
   const [people, setPeople] = useState([]);
   const [showAdd, setShowAdd] = useState(false);
+  const [editingTx, setEditingTx] = useState(null);
 
   async function loadAll() {
     const [txRes, accountsRes, categoriesRes, peopleRes] = await Promise.all([
@@ -42,8 +43,9 @@ export default function Transactions() {
     loadAll();
   }, []);
 
-  async function handleDelete(id) {
-    await api.delete(`/transactions/${id}`);
+  async function handleDelete(tx) {
+    if (!window.confirm(`Delete "${tx.title}" (${money(tx.amount)})? This can't be undone.`)) return;
+    await api.delete(`/transactions/${tx._id}`);
     loadAll();
   }
 
@@ -82,13 +84,22 @@ export default function Transactions() {
                 </div>
               </div>
               <span className="font-bold tabular-nums shrink-0">{money(tx.amount)}</span>
-              <button
-                onClick={() => handleDelete(tx._id)}
-                aria-label="Delete transaction"
-                className="text-ink-faint hover:text-bad transition-colors shrink-0"
-              >
-                <Trash2 size={16} />
-              </button>
+              <div className="flex items-center gap-2.5 shrink-0">
+                <button
+                  onClick={() => setEditingTx(tx)}
+                  aria-label="Edit transaction"
+                  className="text-ink-faint hover:text-accent-ink transition-colors"
+                >
+                  <Pencil size={15} />
+                </button>
+                <button
+                  onClick={() => handleDelete(tx)}
+                  aria-label="Delete transaction"
+                  className="text-ink-faint hover:text-bad transition-colors"
+                >
+                  <Trash2 size={16} />
+                </button>
+              </div>
             </div>
           );
         })}
@@ -111,6 +122,17 @@ export default function Transactions() {
           categories={categories}
           people={people}
           onClose={() => setShowAdd(false)}
+          onCreated={loadAll}
+        />
+      )}
+
+      {editingTx && (
+        <AddTransactionModal
+          accounts={walletAccounts}
+          categories={categories}
+          people={people}
+          editingTx={editingTx}
+          onClose={() => setEditingTx(null)}
           onCreated={loadAll}
         />
       )}
