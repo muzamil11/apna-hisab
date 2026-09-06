@@ -21,6 +21,7 @@ import {
 import api from "../api/client.js";
 import Spinner from "../components/Spinner.jsx";
 import AddTransactionModal from "../components/AddTransactionModal.jsx";
+import { useConfirm } from "../context/ConfirmContext.jsx";
 
 const money = (n) => `Rs ${Math.round(n).toLocaleString("en-PK")}`;
 const fmtDate = (d) => new Date(d).toLocaleDateString("en-PK", { day: "numeric", month: "short" });
@@ -497,6 +498,7 @@ function StatementHistory({ cardId }) {
 const PAGE_SIZE = 10;
 
 function AccountHistory({ account, onEdit, onChanged }) {
+  const confirm = useConfirm();
   const [entries, setEntries] = useState([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(0);
@@ -520,7 +522,7 @@ function AccountHistory({ account, onEdit, onChanged }) {
   }, [account._id, page]);
 
   async function handleDelete(tx) {
-    if (!window.confirm(`Delete "${tx.title}" (${money(tx.amount)})? This can't be undone.`)) return;
+    if (!(await confirm(`Delete "${tx.title}" (${money(tx.amount)})? This can't be undone.`))) return;
     setDeletingId(tx._id);
     try {
       await api.delete(`/transactions/${tx._id}`);
@@ -614,6 +616,7 @@ function AccountHistory({ account, onEdit, onChanged }) {
 }
 
 export default function Accounts() {
+  const confirm = useConfirm();
   const [accounts, setAccounts] = useState([]);
   const [netWorth, setNetWorth] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -677,9 +680,9 @@ export default function Accounts() {
         account.kind === "LIABILITY"
           ? `You still owe ${money(account.balance)} on this. Closing it will make your net worth look ${money(account.balance)} higher than it really is, since that debt won't be subtracted anymore.`
           : `This still holds ${money(account.balance)}. Closing it will remove that amount from your net worth, since it'll no longer be counted as something you own — make sure you've moved the money out first.`;
-      const ok = window.confirm(`${impact} Close ${account.name} anyway?`);
+      const ok = await confirm(`${impact} Close ${account.name} anyway?`);
       if (!ok) return;
-    } else if (!window.confirm(archived ? `Close ${account.name}?` : `Reopen ${account.name}?`)) {
+    } else if (!(await confirm(archived ? `Close ${account.name}?` : `Reopen ${account.name}?`))) {
       return;
     }
     setArchivingId(account._id);

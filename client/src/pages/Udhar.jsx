@@ -3,6 +3,8 @@ import { BarChart, Bar, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, Refere
 import { Plus, ArrowUpRight, ArrowDownLeft, ChevronDown, Pencil, Trash2, X } from "lucide-react";
 import api from "../api/client.js";
 import Spinner from "../components/Spinner.jsx";
+import { useConfirm } from "../context/ConfirmContext.jsx";
+import { useToast } from "../context/ToastContext.jsx";
 
 const shortMoney = (n) => {
   const abs = Math.abs(n);
@@ -182,6 +184,7 @@ function EntryForm({ person, cashAccounts, editingTx, onClose, onDone }) {
 }
 
 function PersonHistory({ person, onEdit, onChanged }) {
+  const confirm = useConfirm();
   const [entries, setEntries] = useState([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(0);
@@ -205,7 +208,7 @@ function PersonHistory({ person, onEdit, onChanged }) {
   }, [person._id, page]);
 
   async function handleDelete(tx) {
-    if (!window.confirm(`Delete "${tx.title}" (${money(tx.amount)})? This can't be undone.`)) return;
+    if (!(await confirm(`Delete "${tx.title}" (${money(tx.amount)})? This can't be undone.`))) return;
     setDeletingId(tx._id);
     try {
       await api.delete(`/transactions/${tx._id}`);
@@ -297,6 +300,8 @@ function PersonHistory({ person, onEdit, onChanged }) {
 }
 
 export default function Udhar() {
+  const confirm = useConfirm();
+  const showToast = useToast();
   const [people, setPeople] = useState([]);
   const [accounts, setAccounts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -332,13 +337,13 @@ export default function Udhar() {
   }
 
   async function handleRemovePerson(person) {
-    if (!window.confirm(`Remove ${person.name}? This only works if their balance is fully settled.`)) return;
+    if (!(await confirm(`Remove ${person.name}? This only works if their balance is fully settled.`))) return;
     setRemovingId(person._id);
     try {
       await api.delete(`/people/${person._id}`);
       await load();
     } catch (err) {
-      alert(err.response?.data?.error || "Could not remove this person.");
+      showToast(err.response?.data?.error || "Could not remove this person.", "error");
     } finally {
       setRemovingId(null);
     }

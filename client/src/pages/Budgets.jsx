@@ -2,10 +2,12 @@ import { useEffect, useState } from "react";
 import { Trash2, Pencil, Check, Plus } from "lucide-react";
 import api from "../api/client.js";
 import Spinner from "../components/Spinner.jsx";
+import { useConfirm } from "../context/ConfirmContext.jsx";
 
 const money = (n) => `Rs ${Math.round(n).toLocaleString("en-PK")}`;
 
 export default function Budgets() {
+  const confirm = useConfirm();
   const [budgets, setBudgets] = useState([]);
   const [allCategories, setAllCategories] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -110,7 +112,7 @@ export default function Budgets() {
   }
 
   async function deleteCategory(cat) {
-    if (!window.confirm(`Delete "${cat.name}"? This only works if no transaction or budget uses it.`)) return;
+    if (!(await confirm(`Delete "${cat.name}"? This only works if no transaction or budget uses it.`))) return;
     setCatError("");
     setDeletingCatId(cat._id);
     try {

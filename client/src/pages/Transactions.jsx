@@ -3,6 +3,7 @@ import { Plus, TrendingUp, TrendingDown, ArrowLeftRight, Pencil, Trash2 } from "
 import api from "../api/client.js";
 import AddTransactionModal from "../components/AddTransactionModal.jsx";
 import Spinner from "../components/Spinner.jsx";
+import { useConfirm } from "../context/ConfirmContext.jsx";
 
 const money = (n) => `Rs ${Math.round(n).toLocaleString("en-PK")}`;
 
@@ -14,6 +15,7 @@ const TYPE_META = {
 };
 
 export default function Transactions() {
+  const confirm = useConfirm();
   const [transactions, setTransactions] = useState([]);
   const [accounts, setAccounts] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -47,7 +49,7 @@ export default function Transactions() {
   }, []);
 
   async function handleDelete(tx) {
-    if (!window.confirm(`Delete "${tx.title}" (${money(tx.amount)})? This can't be undone.`)) return;
+    if (!(await confirm(`Delete "${tx.title}" (${money(tx.amount)})? This can't be undone.`))) return;
     setDeletingId(tx._id);
     try {
       await api.delete(`/transactions/${tx._id}`);
