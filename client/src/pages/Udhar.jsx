@@ -333,23 +333,30 @@ export default function Udhar() {
           const isOpen = expanded === p._id;
           return (
             <div key={p._id} className="bg-surface border border-border shadow-card rounded-xl overflow-hidden">
-              <div className="p-4">
+              <div
+                className="p-4 cursor-pointer"
+                role="button"
+                tabIndex={0}
+                onClick={() => setExpanded(isOpen ? null : p._id)}
+                onKeyDown={(e) => e.key === "Enter" && setExpanded(isOpen ? null : p._id)}
+              >
                 <div className="flex items-center justify-between mb-3">
                   <span className="font-bold">{p.name}</span>
                   <div className="flex items-center gap-2">
                     <button
-                      onClick={() => setActivePerson({ ...p, receivable, payable })}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setActivePerson({ ...p, receivable, payable });
+                      }}
                       className="flex items-center gap-1 text-sm text-accent-ink font-semibold"
                     >
                       <Plus size={15} strokeWidth={2.5} /> Entry
                     </button>
-                    <button
-                      onClick={() => setExpanded(isOpen ? null : p._id)}
-                      aria-label="Toggle history"
-                      className="text-ink-faint"
-                    >
-                      <ChevronDown size={18} className={`transition-transform ${isOpen ? "rotate-180" : ""}`} />
-                    </button>
+                    <ChevronDown
+                      size={18}
+                      aria-hidden="true"
+                      className={`text-ink-faint transition-transform ${isOpen ? "rotate-180" : ""}`}
+                    />
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
