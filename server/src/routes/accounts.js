@@ -3,7 +3,7 @@ import Account from "../models/Account.js";
 import Transaction from "../models/Transaction.js";
 import { requireAuth } from "../middleware/auth.js";
 import { getNetWorth, recomputeAccountBalance, applyTransactionEffects } from "../utils/ledger.js";
-import { getCardSummary } from "../utils/creditCard.js";
+import { getCardSummary, getStatementHistory } from "../utils/creditCard.js";
 
 const router = Router();
 router.use(requireAuth);
@@ -53,6 +53,14 @@ router.patch("/:id/archive", async (req, res) => {
   );
   if (!account) return res.status(404).json({ error: "Account not found" });
   res.json(account);
+});
+
+router.get("/:id/statements", async (req, res) => {
+  const account = await Account.findOne({ _id: req.params.id, user: req.userId, type: "CREDIT_CARD" });
+  if (!account) return res.status(404).json({ error: "Card not found" });
+  const months = Math.min(24, Math.max(1, Number(req.query.months) || 6));
+  const statements = await getStatementHistory(Transaction, account, months);
+  res.json(statements);
 });
 
 // Safety valve: recompute a balance from the full transaction ledger if it

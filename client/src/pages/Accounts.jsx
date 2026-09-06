@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Landmark, Wallet, CreditCard, LineChart, PiggyBank, Building2, Target, AlertCircle, X } from "lucide-react";
+import { Landmark, Wallet, CreditCard, LineChart, PiggyBank, Building2, Target, AlertCircle, ChevronDown, X } from "lucide-react";
 import api from "../api/client.js";
 import Spinner from "../components/Spinner.jsx";
 
@@ -151,6 +151,45 @@ function ContributeForm({ goal, cashAccounts, onClose, onDone }) {
   );
 }
 
+function StatementHistory({ cardId }) {
+  const [statements, setStatements] = useState(null);
+
+  useEffect(() => {
+    api.get(`/accounts/${cardId}/statements`, { params: { months: 6 } }).then((res) => setStatements(res.data));
+  }, [cardId]);
+
+  if (!statements) {
+    return (
+      <div className="flex items-center justify-center py-3 text-ink-faint">
+        <Spinner size={16} />
+      </div>
+    );
+  }
+
+  if (statements.length === 0) {
+    return <p className="text-xs text-ink-faint text-center py-2">No closed statements yet.</p>;
+  }
+
+  return (
+    <div className="space-y-1.5">
+      {statements.map((s) => (
+        <div key={s.dueDate} className="flex items-center justify-between text-sm py-1">
+          <div>
+            <div className="font-medium">
+              {fmtDate(s.periodStart)} – {fmtDate(s.periodEnd)}
+            </div>
+            <div className="text-xs text-ink-faint">Was due {fmtDateLong(s.dueDate)}</div>
+          </div>
+          <span className="font-bold tabular-nums">{money(s.total)}</span>
+        </div>
+      ))}
+      <p className="text-xs text-ink-faint pt-1">
+        This is what each cycle cost — the "Due by" amount above always reflects what's actually still owed right now.
+      </p>
+    </div>
+  );
+}
+
 export default function Accounts() {
   const [accounts, setAccounts] = useState([]);
   const [netWorth, setNetWorth] = useState(0);
@@ -160,11 +199,13 @@ export default function Accounts() {
   const [startingBalance, setStartingBalance] = useState("");
   const [billingCycleDay, setBillingCycleDay] = useState("");
   const [dueDay, setDueDay] = useState("");
+  const [creditLimit, setCreditLimit] = useState("");
   const [targetAmount, setTargetAmount] = useState("");
   const [targetDate, setTargetDate] = useState("");
   const [adding, setAdding] = useState(false);
   const [payingCard, setPayingCard] = useState(null);
   const [contributingGoal, setContributingGoal] = useState(null);
+  const [expandedCard, setExpandedCard] = useState(null);
 
   async function load() {
     const { data } = await api.get("/accounts");
@@ -181,7 +222,11 @@ export default function Accounts() {
     if (!name) return;
     let meta;
     if (type === "CREDIT_CARD") {
-      meta = { billingCycleDay: Number(billingCycleDay) || undefined, dueDay: Number(dueDay) || undefined };
+      meta = {
+        billingCycleDay: Number(billingCycleDay) || undefined,
+        dueDay: Number(dueDay) || undefined,
+        creditLimit: Number(creditLimit) || undefined,
+      };
     } else if (type === "GOAL") {
       meta = { targetAmount: Number(targetAmount) || undefined, targetDate: targetDate || undefined };
     }
@@ -197,6 +242,7 @@ export default function Accounts() {
       setStartingBalance("");
       setBillingCycleDay("");
       setDueDay("");
+      setCreditLimit("");
       setTargetAmount("");
       setTargetDate("");
       await load();
@@ -246,7 +292,7 @@ export default function Accounts() {
               placeholder="Billing date (day of month, e.g. 20)"
               value={billingCycleDay}
               onChange={(e) => setBillingCycleDay(e.target.value)}
-              className={`${inputClass} flex-1 min-w-[200px]`}
+              className={`${inputClass} flex-1 min-w-[180px]`}
             />
             <input
               type="number"
@@ -255,7 +301,14 @@ export default function Accounts() {
               placeholder="Due date (day of month, e.g. 9)"
               value={dueDay}
               onChange={(e) => setDueDay(e.target.value)}
-              className={`${inputClass} flex-1 min-w-[200px]`}
+              className={`${inputClass} flex-1 min-w-[180px]`}
+            />
+            <input
+              type="number"
+              placeholder="Credit limit — e.g. 170000"
+              value={creditLimit}
+              onChange={(e) => setCreditLimit(e.target.value)}
+              className={`${inputClass} flex-1 min-w-[180px]`}
             />
           </div>
         )}
@@ -303,81 +356,114 @@ export default function Accounts() {
           <Spinner size={22} />
         </div>
       ) : (
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        {accounts.map((a) => {
-          const Icon = iconFor(a.type);
-          const goalPct = a.type === "GOAL" && a.meta?.targetAmount ? Math.min(100, (a.balance / a.meta.targetAmount) * 100) : null;
-          return (
-            <div key={a._id} className="bg-surface border border-border shadow-card rounded-xl p-4">
-              <div className="flex items-center gap-3.5">
-                <div className="w-10 h-10 rounded-lg bg-accent-soft text-accent-ink flex items-center justify-center shrink-0">
-                  <Icon size={18} strokeWidth={2} />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {accounts.map((a) => {
+            const Icon = iconFor(a.type);
+            const goalPct =
+              a.type === "GOAL" && a.meta?.targetAmount ? Math.min(100, (a.balance / a.meta.targetAmount) * 100) : null;
+            const isCardOpen = expandedCard === a._id;
+            return (
+              <div key={a._id} className="bg-surface border border-border shadow-card rounded-xl p-4">
+                <div className="flex items-center gap-3.5">
+                  <div className="w-10 h-10 rounded-lg bg-accent-soft text-accent-ink flex items-center justify-center shrink-0">
+                    <Icon size={18} strokeWidth={2} />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-xs text-ink-faint font-medium">{a.type.replace("_", " ")}</div>
+                    <div className="font-semibold truncate">{a.name}</div>
+                  </div>
+                  <div className={`text-lg font-bold tabular-nums shrink-0 ${a.kind === "LIABILITY" ? "text-bad" : "text-ink"}`}>
+                    {money(a.balance)}
+                  </div>
                 </div>
-                <div className="min-w-0 flex-1">
-                  <div className="text-xs text-ink-faint font-medium">{a.type.replace("_", " ")}</div>
-                  <div className="font-semibold truncate">{a.name}</div>
-                </div>
-                <div className={`text-lg font-bold tabular-nums shrink-0 ${a.kind === "LIABILITY" ? "text-bad" : "text-ink"}`}>
-                  {money(a.balance)}
-                </div>
-              </div>
 
-              {goalPct !== null && (
-                <div className="mt-3 pt-3 border-t border-border space-y-2">
-                  <div className="h-2 rounded-full bg-canvas overflow-hidden">
-                    <div className="h-full bg-accent rounded-full transition-all" style={{ width: `${goalPct}%` }} />
-                  </div>
-                  <div className="flex items-center justify-between text-xs text-ink-faint">
-                    <span>
-                      {money(a.balance)} of {money(a.meta.targetAmount)} ({Math.round(goalPct)}%)
-                    </span>
-                    {a.meta.targetDate && <span>by {fmtDateLong(a.meta.targetDate)}</span>}
-                  </div>
-                  <button
-                    onClick={() => setContributingGoal(a)}
-                    className="w-full text-sm font-semibold text-accent-ink bg-accent-soft hover:bg-accent-soft/70 rounded-lg py-2 transition-colors"
-                  >
-                    Add money
-                  </button>
-                </div>
-              )}
-
-              {a.cardSummary && (
-                <div className="mt-3 pt-3 border-t border-border space-y-2">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-ink-faint">This cycle (not due yet)</span>
-                    <span className="font-semibold tabular-nums">{money(a.cardSummary.unbilled)}</span>
-                  </div>
-                  {a.cardSummary.billed > 0 && (
-                    <div
-                      className={`flex items-center justify-between rounded-lg px-3 py-2 text-sm ${
-                        a.cardSummary.overdue ? "bg-bad-soft" : "bg-warn-soft"
-                      }`}
-                    >
-                      <span className={`flex items-center gap-1.5 font-medium ${a.cardSummary.overdue ? "text-bad" : "text-warn"}`}>
-                        <AlertCircle size={14} />
-                        {a.cardSummary.overdue ? "Overdue since" : "Due by"} {fmtDate(a.cardSummary.dueDate)}
-                      </span>
-                      <span className={`font-bold tabular-nums ${a.cardSummary.overdue ? "text-bad" : "text-warn"}`}>
-                        {money(a.cardSummary.billed)}
-                      </span>
+                {goalPct !== null && (
+                  <div className="mt-3 pt-3 border-t border-border space-y-2">
+                    <div className="h-2 rounded-full bg-canvas overflow-hidden">
+                      <div className="h-full bg-accent rounded-full transition-all" style={{ width: `${goalPct}%` }} />
                     </div>
-                  )}
-                  <button
-                    onClick={() => setPayingCard(a)}
-                    className="w-full text-sm font-semibold text-accent-ink bg-accent-soft hover:bg-accent-soft/70 rounded-lg py-2 transition-colors"
-                  >
-                    Pay bill
-                  </button>
-                </div>
-              )}
-            </div>
-          );
-        })}
-        {accounts.length === 0 && (
-          <p className="text-sm text-ink-faint py-4 text-center col-span-2">No accounts yet — add your first one above.</p>
-        )}
-      </div>
+                    <div className="flex items-center justify-between text-xs text-ink-faint">
+                      <span>
+                        {money(a.balance)} of {money(a.meta.targetAmount)} ({Math.round(goalPct)}%)
+                      </span>
+                      {a.meta.targetDate && <span>by {fmtDateLong(a.meta.targetDate)}</span>}
+                    </div>
+                    <button
+                      onClick={() => setContributingGoal(a)}
+                      className="w-full text-sm font-semibold text-accent-ink bg-accent-soft hover:bg-accent-soft/70 rounded-lg py-2 transition-colors"
+                    >
+                      Add money
+                    </button>
+                  </div>
+                )}
+
+                {a.cardSummary && (
+                  <div className="mt-3 pt-3 border-t border-border space-y-2">
+                    {a.cardSummary.creditLimit && (
+                      <div className="space-y-1">
+                        <div className="h-2 rounded-full bg-canvas overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all ${
+                              a.cardSummary.utilizationPct >= 90
+                                ? "bg-bad"
+                                : a.cardSummary.utilizationPct >= 70
+                                  ? "bg-warn"
+                                  : "bg-accent"
+                            }`}
+                            style={{ width: `${Math.min(100, a.cardSummary.utilizationPct)}%` }}
+                          />
+                        </div>
+                        <div className="text-xs text-ink-faint">
+                          {money(a.balance)} of {money(a.cardSummary.creditLimit)} limit ({a.cardSummary.utilizationPct}%)
+                        </div>
+                      </div>
+                    )}
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-ink-faint">This cycle (not due yet)</span>
+                      <span className="font-semibold tabular-nums">{money(a.cardSummary.unbilled)}</span>
+                    </div>
+                    {a.cardSummary.billed > 0 && (
+                      <div
+                        className={`flex items-center justify-between rounded-lg px-3 py-2 text-sm ${
+                          a.cardSummary.overdue ? "bg-bad-soft" : "bg-warn-soft"
+                        }`}
+                      >
+                        <span className={`flex items-center gap-1.5 font-medium ${a.cardSummary.overdue ? "text-bad" : "text-warn"}`}>
+                          <AlertCircle size={14} />
+                          {a.cardSummary.overdue ? "Overdue since" : "Due by"} {fmtDate(a.cardSummary.dueDate)}
+                        </span>
+                        <span className={`font-bold tabular-nums ${a.cardSummary.overdue ? "text-bad" : "text-warn"}`}>
+                          {money(a.cardSummary.billed)}
+                        </span>
+                      </div>
+                    )}
+                    <button
+                      onClick={() => setPayingCard(a)}
+                      className="w-full text-sm font-semibold text-accent-ink bg-accent-soft hover:bg-accent-soft/70 rounded-lg py-2 transition-colors"
+                    >
+                      Pay bill
+                    </button>
+                    <button
+                      onClick={() => setExpandedCard(isCardOpen ? null : a._id)}
+                      className="w-full flex items-center justify-center gap-1 text-xs font-medium text-ink-faint hover:text-ink pt-1"
+                    >
+                      Statement history
+                      <ChevronDown size={14} className={`transition-transform ${isCardOpen ? "rotate-180" : ""}`} />
+                    </button>
+                    {isCardOpen && (
+                      <div className="pt-2 border-t border-border">
+                        <StatementHistory cardId={a._id} />
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+          {accounts.length === 0 && (
+            <p className="text-sm text-ink-faint py-4 text-center col-span-2">No accounts yet — add your first one above.</p>
+          )}
+        </div>
       )}
 
       {payingCard && (

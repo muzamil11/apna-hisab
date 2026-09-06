@@ -27,6 +27,7 @@ const accountSchema = new mongoose.Schema(
     meta: {
       billingCycleDay: Number, // CREDIT_CARD
       dueDay: Number, // CREDIT_CARD
+      creditLimit: Number, // CREDIT_CARD
       payoutMonth: Date, // COMMITTEE
       targetAmount: Number, // GOAL
       targetDate: Date, // GOAL

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { lastBillingDate, statementDueDate } from "./creditCard.js";
+import { lastBillingDate, statementDueDate, groupIntoStatements } from "./creditCard.js";
 
 describe("statementDueDate — billing day 20, due day 9 (the user's real card)", () => {
   it("a purchase before the billing day is due the following month", () => {
@@ -54,5 +54,35 @@ describe("lastBillingDate", () => {
   it("carries correctly across a year boundary", () => {
     const result = lastBillingDate(20, new Date(2027, 0, 5)); // 5 Jan 2027
     expect(result).toEqual(new Date(2026, 11, 20)); // 20 Dec 2026
+  });
+});
+
+describe("groupIntoStatements — the user's real card (billing 20, due 9)", () => {
+  it("splits charges into separate statements by which cycle they fall in", () => {
+    const charges = [
+      { date: new Date(2026, 7, 15), amount: 54000 }, // 15 Aug -> statement due 9 Sept
+      { date: new Date(2026, 8, 1), amount: 70000 }, // 1 Sept -> statement due 9 Oct
+      { date: new Date(2026, 8, 3), amount: 50000 }, // 3 Sept -> statement due 9 Oct (e.g. Mom's spending)
+    ];
+
+    const statements = groupIntoStatements(charges, 20, 9);
+
+    expect(statements).toHaveLength(2);
+    // newest (still-open) statement first
+    expect(statements[0].dueDate).toEqual(new Date(2026, 9, 9));
+    expect(statements[0].total).toBe(120000);
+    expect(statements[1].dueDate).toEqual(new Date(2026, 8, 9));
+    expect(statements[1].total).toBe(54000);
+  });
+
+  it("computes the period range for a statement correctly", () => {
+    const charges = [{ date: new Date(2026, 7, 15), amount: 54000 }];
+    const [statement] = groupIntoStatements(charges, 20, 9);
+    expect(statement.periodStart).toEqual(new Date(2026, 6, 21)); // 21 Jul
+    expect(statement.periodEnd).toEqual(new Date(2026, 7, 20)); // 20 Aug
+  });
+
+  it("returns nothing for an empty charge list", () => {
+    expect(groupIntoStatements([], 20, 9)).toEqual([]);
   });
 });

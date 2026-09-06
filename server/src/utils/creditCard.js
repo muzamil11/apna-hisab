@@ -18,7 +18,7 @@ export function lastBillingDate(billingCycleDay, referenceDate = new Date()) {
 // Splits what's owed on a card into "this cycle" (not due yet) and "already
 // billed" (owed now), with the due date for that already-billed portion.
 export async function getCardSummary(Transaction, card) {
-  const { billingCycleDay, dueDay } = card.meta || {};
+  const { billingCycleDay, dueDay, creditLimit } = card.meta || {};
   if (!billingCycleDay || !dueDay) return null;
 
   const cutoff = lastBillingDate(billingCycleDay);
@@ -32,5 +32,40 @@ export async function getCardSummary(Transaction, card) {
     billed,
     dueDate,
     overdue: billed > 0 && new Date() > dueDate,
+    creditLimit: creditLimit || null,
+    utilizationPct: creditLimit ? Math.round((card.balance / creditLimit) * 100) : null,
   };
+}
+
+// A read-only "what did each past cycle cost" report, grouped by the
+// statement they belong to. This never touches what's actually owed —
+// getCardSummary's live balance stays the one source of truth for that —
+// so a history view can't drift from the real numbers even if payments
+// don't map cleanly onto a single statement.
+export function groupIntoStatements(charges, billingCycleDay, dueDay) {
+  const groups = new Map();
+  for (const tx of charges) {
+    const due = statementDueDate(tx.date, billingCycleDay, dueDay);
+    const key = `${due.getFullYear()}-${due.getMonth()}`;
+    if (!groups.has(key)) {
+      const periodEnd = new Date(due.getFullYear(), due.getMonth() - 1, billingCycleDay);
+      const periodStart = new Date(due.getFullYear(), due.getMonth() - 2, billingCycleDay + 1);
+      groups.set(key, { periodStart, periodEnd, dueDate: due, total: 0 });
+    }
+    groups.get(key).total += tx.amount;
+  }
+  return [...groups.values()].sort((a, b) => b.dueDate - a.dueDate);
+}
+
+export async function getStatementHistory(Transaction, card, months = 6) {
+  const { billingCycleDay, dueDay } = card.meta || {};
+  if (!billingCycleDay || !dueDay) return [];
+
+  const since = new Date();
+  since.setMonth(since.getMonth() - months - 1);
+  const charges = await Transaction.find({ fromAccount: card._id, date: { $gte: since } });
+
+  const cutoff = lastBillingDate(billingCycleDay);
+  const closedCharges = charges.filter((t) => t.date <= cutoff);
+  return groupIntoStatements(closedCharges, billingCycleDay, dueDay).slice(0, months);
 }
