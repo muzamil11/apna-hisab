@@ -6,6 +6,7 @@ export const ACCOUNT_TYPES = [
   "CREDIT_CARD",
   "INVESTMENT",
   "COMMITTEE",
+  "GOAL", // a savings target with an amount and optional date — e.g. a wedding fund
   "RECEIVABLE", // udhar diya — someone owes this user
   "PAYABLE", // udhar liya — this user owes someone
   "ASSET_OTHER", // e.g. real estate
@@ -27,6 +28,8 @@ const accountSchema = new mongoose.Schema(
       billingCycleDay: Number, // CREDIT_CARD
       dueDay: Number, // CREDIT_CARD
       payoutMonth: Date, // COMMITTEE
+      targetAmount: Number, // GOAL
+      targetDate: Date, // GOAL
     },
     archived: { type: Boolean, default: false },
   },

@@ -11,7 +11,7 @@ export function statementDueDate(purchaseDate, billingCycleDay, dueDay) {
 export function lastBillingDate(billingCycleDay, referenceDate = new Date()) {
   const d = new Date(referenceDate);
   const candidate = new Date(d.getFullYear(), d.getMonth(), billingCycleDay);
-  if (d.getDate() <= billingCycleDay) candidate.setMonth(candidate.getMonth() - 1);
+  if (d.getDate() < billingCycleDay) candidate.setMonth(candidate.getMonth() - 1);
   return candidate;
 }
 

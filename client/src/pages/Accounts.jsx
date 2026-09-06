@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
-import { Landmark, Wallet, CreditCard, LineChart, PiggyBank, Building2, AlertCircle, X } from "lucide-react";
+import { Landmark, Wallet, CreditCard, LineChart, PiggyBank, Building2, Target, AlertCircle, X } from "lucide-react";
 import api from "../api/client.js";
 
 const money = (n) => `Rs ${Math.round(n).toLocaleString("en-PK")}`;
 const fmtDate = (d) => new Date(d).toLocaleDateString("en-PK", { day: "numeric", month: "short" });
+const fmtDateLong = (d) => new Date(d).toLocaleDateString("en-PK", { day: "numeric", month: "short", year: "numeric" });
 
 const TYPES = [
   { value: "BANK", label: "Bank Account", icon: Landmark },
@@ -11,6 +12,7 @@ const TYPES = [
   { value: "CREDIT_CARD", label: "Credit Card", icon: CreditCard },
   { value: "INVESTMENT", label: "Investment", icon: LineChart },
   { value: "COMMITTEE", label: "Committee", icon: PiggyBank },
+  { value: "GOAL", label: "Savings Goal (e.g. wedding)", icon: Target },
   { value: "ASSET_OTHER", label: "Other Asset (e.g. a flat)", icon: Building2 },
 ];
 
@@ -43,7 +45,7 @@ function PayBillForm({ card, cashAccounts, onClose, onDone }) {
 
   return (
     <div className="fixed inset-0 bg-ink/40 flex items-end md:items-center justify-center z-50">
-      <form onSubmit={submit} className="bg-surface w-full md:max-w-sm md:rounded-2xl rounded-t-2xl p-6 space-y-4">
+      <form onSubmit={submit} className="bg-surface w-full md:max-w-sm md:rounded-2xl rounded-t-2xl p-6 space-y-4 max-h-[92vh] overflow-y-auto">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-bold tracking-tight">Pay {card.name}</h2>
           <button type="button" onClick={onClose} aria-label="Close" className="text-ink-faint hover:text-ink">
@@ -77,6 +79,69 @@ function PayBillForm({ card, cashAccounts, onClose, onDone }) {
   );
 }
 
+function ContributeForm({ goal, cashAccounts, onClose, onDone }) {
+  const [amount, setAmount] = useState("");
+  const [fromAccount, setFromAccount] = useState(cashAccounts[0]?._id || "");
+  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [saving, setSaving] = useState(false);
+
+  async function submit(e) {
+    e.preventDefault();
+    if (!amount || !fromAccount) return;
+    setSaving(true);
+    await api.post("/transactions", {
+      type: "TRANSFER",
+      amount: Number(amount),
+      title: `${goal.name} — contribution`,
+      fromAccount,
+      toAccount: goal._id,
+      date,
+    });
+    setSaving(false);
+    onDone();
+    onClose();
+  }
+
+  return (
+    <div className="fixed inset-0 bg-ink/40 flex items-end md:items-center justify-center z-50">
+      <form onSubmit={submit} className="bg-surface w-full md:max-w-sm md:rounded-2xl rounded-t-2xl p-6 space-y-4 max-h-[92vh] overflow-y-auto">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-bold tracking-tight">Add to {goal.name}</h2>
+          <button type="button" onClick={onClose} aria-label="Close" className="text-ink-faint hover:text-ink">
+            <X size={20} />
+          </button>
+        </div>
+        <input
+          type="number"
+          inputMode="decimal"
+          placeholder="Amount"
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+          className={`${inputClass} w-full text-xl font-bold tabular-nums`}
+        />
+        <select value={fromAccount} onChange={(e) => setFromAccount(e.target.value)} className={`${inputClass} w-full`}>
+          {cashAccounts.map((a) => (
+            <option key={a._id} value={a._id}>
+              From {a.name}
+            </option>
+          ))}
+        </select>
+        <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={`${inputClass} w-full`} />
+        <button
+          type="submit"
+          disabled={saving}
+          className="w-full bg-accent hover:bg-accent-ink text-white font-semibold py-2.5 rounded-lg transition-colors disabled:opacity-50"
+        >
+          {saving ? "Saving…" : "Add to goal"}
+        </button>
+        <p className="text-xs text-ink-faint text-center">
+          This just earmarks the money — your net worth doesn't change, it's still yours until you actually spend it.
+        </p>
+      </form>
+    </div>
+  );
+}
+
 export default function Accounts() {
   const [accounts, setAccounts] = useState([]);
   const [netWorth, setNetWorth] = useState(0);
@@ -85,7 +150,10 @@ export default function Accounts() {
   const [startingBalance, setStartingBalance] = useState("");
   const [billingCycleDay, setBillingCycleDay] = useState("");
   const [dueDay, setDueDay] = useState("");
+  const [targetAmount, setTargetAmount] = useState("");
+  const [targetDate, setTargetDate] = useState("");
   const [payingCard, setPayingCard] = useState(null);
+  const [contributingGoal, setContributingGoal] = useState(null);
 
   async function load() {
     const { data } = await api.get("/accounts");
@@ -100,19 +168,24 @@ export default function Accounts() {
   async function handleAdd(e) {
     e.preventDefault();
     if (!name) return;
+    let meta;
+    if (type === "CREDIT_CARD") {
+      meta = { billingCycleDay: Number(billingCycleDay) || undefined, dueDay: Number(dueDay) || undefined };
+    } else if (type === "GOAL") {
+      meta = { targetAmount: Number(targetAmount) || undefined, targetDate: targetDate || undefined };
+    }
     await api.post("/accounts", {
       name,
       type,
       startingBalance: startingBalance ? Number(startingBalance) : 0,
-      meta:
-        type === "CREDIT_CARD"
-          ? { billingCycleDay: Number(billingCycleDay) || undefined, dueDay: Number(dueDay) || undefined }
-          : undefined,
+      meta,
     });
     setName("");
     setStartingBalance("");
     setBillingCycleDay("");
     setDueDay("");
+    setTargetAmount("");
+    setTargetDate("");
     load();
   }
 
@@ -135,7 +208,7 @@ export default function Accounts() {
         <div className="flex flex-wrap gap-3">
           <input
             type="text"
-            placeholder="Account name — e.g. Meezan Bank"
+            placeholder={type === "GOAL" ? "Goal name — e.g. Wedding gold" : "Account name — e.g. Meezan Bank"}
             value={name}
             onChange={(e) => setName(e.target.value)}
             className={`${inputClass} flex-1 min-w-[180px]`}
@@ -170,16 +243,36 @@ export default function Accounts() {
             />
           </div>
         )}
+        {type === "GOAL" && (
+          <div className="flex flex-wrap gap-3">
+            <input
+              type="number"
+              placeholder="Target amount — e.g. 500000"
+              value={targetAmount}
+              onChange={(e) => setTargetAmount(e.target.value)}
+              className={`${inputClass} flex-1 min-w-[200px]`}
+            />
+            <input
+              type="date"
+              placeholder="Target date (optional)"
+              value={targetDate}
+              onChange={(e) => setTargetDate(e.target.value)}
+              className={`${inputClass} flex-1 min-w-[200px]`}
+            />
+          </div>
+        )}
         <div className="flex flex-wrap items-center gap-3">
-          <input
-            type="number"
-            placeholder="Starting balance (optional, if it isn't zero today)"
-            value={startingBalance}
-            onChange={(e) => setStartingBalance(e.target.value)}
-            className={`${inputClass} flex-1 min-w-[220px]`}
-          />
+          {type !== "GOAL" && (
+            <input
+              type="number"
+              placeholder="Starting balance (optional, if it isn't zero today)"
+              value={startingBalance}
+              onChange={(e) => setStartingBalance(e.target.value)}
+              className={`${inputClass} flex-1 min-w-[220px]`}
+            />
+          )}
           <button type="submit" className="bg-accent hover:bg-accent-ink text-white px-5 py-2.5 rounded-lg font-semibold text-sm transition-colors">
-            Add Account
+            {type === "GOAL" ? "Create Goal" : "Add Account"}
           </button>
         </div>
       </form>
@@ -187,6 +280,7 @@ export default function Accounts() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         {accounts.map((a) => {
           const Icon = iconFor(a.type);
+          const goalPct = a.type === "GOAL" && a.meta?.targetAmount ? Math.min(100, (a.balance / a.meta.targetAmount) * 100) : null;
           return (
             <div key={a._id} className="bg-surface border border-border shadow-card rounded-xl p-4">
               <div className="flex items-center gap-3.5">
@@ -201,6 +295,26 @@ export default function Accounts() {
                   {money(a.balance)}
                 </div>
               </div>
+
+              {goalPct !== null && (
+                <div className="mt-3 pt-3 border-t border-border space-y-2">
+                  <div className="h-2 rounded-full bg-canvas overflow-hidden">
+                    <div className="h-full bg-accent rounded-full transition-all" style={{ width: `${goalPct}%` }} />
+                  </div>
+                  <div className="flex items-center justify-between text-xs text-ink-faint">
+                    <span>
+                      {money(a.balance)} of {money(a.meta.targetAmount)} ({Math.round(goalPct)}%)
+                    </span>
+                    {a.meta.targetDate && <span>by {fmtDateLong(a.meta.targetDate)}</span>}
+                  </div>
+                  <button
+                    onClick={() => setContributingGoal(a)}
+                    className="w-full text-sm font-semibold text-accent-ink bg-accent-soft hover:bg-accent-soft/70 rounded-lg py-2 transition-colors"
+                  >
+                    Add money
+                  </button>
+                </div>
+              )}
 
               {a.cardSummary && (
                 <div className="mt-3 pt-3 border-t border-border space-y-2">
@@ -240,10 +354,13 @@ export default function Accounts() {
       </div>
 
       {payingCard && (
-        <PayBillForm
-          card={payingCard}
+        <PayBillForm card={payingCard} cashAccounts={cashAccounts} onClose={() => setPayingCard(null)} onDone={load} />
+      )}
+      {contributingGoal && (
+        <ContributeForm
+          goal={contributingGoal}
           cashAccounts={cashAccounts}
-          onClose={() => setPayingCard(null)}
+          onClose={() => setContributingGoal(null)}
           onDone={load}
         />
       )}
