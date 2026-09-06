@@ -1,6 +1,14 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { BarChart, Bar, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts";
 import { Plus, ArrowUpRight, ArrowDownLeft, ChevronDown, X } from "lucide-react";
 import api from "../api/client.js";
+
+const shortMoney = (n) => {
+  const abs = Math.abs(n);
+  if (abs >= 100000) return `${(n / 100000).toFixed(1)}L`;
+  if (abs >= 1000) return `${(n / 1000).toFixed(0)}k`;
+  return `${n}`;
+};
 
 const money = (n) => `Rs ${Math.round(n).toLocaleString("en-PK")}`;
 const fmtDate = (d) => new Date(d).toLocaleDateString("en-PK", { day: "numeric", month: "short", year: "numeric" });
@@ -255,6 +263,18 @@ export default function Udhar() {
   const inputClass =
     "border border-border rounded-lg px-3.5 py-2.5 outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent transition-shadow bg-surface";
 
+  const overview = useMemo(() => {
+    return people
+      .map((p) => {
+        const receivable = p.accounts.find((a) => a.type === "RECEIVABLE")?.balance || 0;
+        const payable = p.accounts.find((a) => a.type === "PAYABLE")?.balance || 0;
+        return { name: p.name, net: receivable - payable };
+      })
+      .filter((p) => p.net !== 0)
+      .sort((a, b) => b.net - a.net);
+  }, [people]);
+  const overviewHeight = Math.max(100, overview.length * 36);
+
   return (
     <div className="space-y-6">
       <div>
@@ -263,6 +283,35 @@ export default function Udhar() {
           Money you lend or borrow doesn't change your net worth — it just moves from cash into what someone owes you, or what you owe them.
         </p>
       </div>
+
+      {overview.length > 0 && (
+        <div className="bg-surface border border-border shadow-card rounded-xl p-5">
+          <h2 className="text-sm font-semibold text-ink-muted mb-3">Who owes what</h2>
+          <ResponsiveContainer width="100%" height={overviewHeight}>
+            <BarChart data={overview} layout="vertical" margin={{ left: 10, right: 30 }}>
+              <XAxis type="number" tickFormatter={shortMoney} tick={{ fontSize: 11, fill: "#94A3B8" }} axisLine={false} tickLine={false} />
+              <YAxis
+                type="category"
+                dataKey="name"
+                width={80}
+                tick={{ fontSize: 12, fill: "#0F172A" }}
+                axisLine={false}
+                tickLine={false}
+              />
+              <ReferenceLine x={0} stroke="#E2E8F0" />
+              <Tooltip
+                formatter={(v) => [`Rs ${Math.abs(v).toLocaleString("en-PK")}`, v >= 0 ? "Owes you" : "You owe"]}
+                cursor={{ fill: "#F6F7FB" }}
+              />
+              <Bar dataKey="net" radius={4} barSize={16}>
+                {overview.map((p, i) => (
+                  <Cell key={i} fill={p.net >= 0 ? "#16A34A" : "#DC2626"} />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      )}
 
       <form onSubmit={handleAdd} className="bg-surface border border-border shadow-card rounded-xl p-4 flex gap-3">
         <input

@@ -1,5 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
-import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
+import {
+  AreaChart,
+  Area,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+  CartesianGrid,
+} from "recharts";
 import { ArrowUp, ArrowDown } from "lucide-react";
 import api from "../api/client.js";
 
@@ -34,6 +45,7 @@ export default function Reports() {
   const [period, setPeriod] = useState("month");
   const [transactions, setTransactions] = useState([]);
   const [netWorthHistory, setNetWorthHistory] = useState([]);
+  const [monthlyTrend, setMonthlyTrend] = useState([]);
 
   useEffect(() => {
     const { from, to } = rangeFor(period);
@@ -51,6 +63,7 @@ export default function Reports() {
         }))
       );
     });
+    api.get("/dashboard/monthly-trend", { params: { months: 6 } }).then((res) => setMonthlyTrend(res.data));
   }, []);
 
   const stats = useMemo(() => {
@@ -65,7 +78,9 @@ export default function Reports() {
       income,
       expense,
       saved: income - expense,
-      byCategory: Object.entries(byCategory).sort((a, b) => b[1] - a[1]),
+      byCategory: Object.entries(byCategory)
+        .map(([category, total]) => ({ category, total }))
+        .sort((a, b) => b.total - a.total),
     };
   }, [transactions]);
 
@@ -73,6 +88,8 @@ export default function Reports() {
     netWorthHistory.length >= 2
       ? netWorthHistory[netWorthHistory.length - 1].netWorth - netWorthHistory[netWorthHistory.length - 2].netWorth
       : null;
+
+  const categoryChartHeight = Math.max(120, stats.byCategory.length * 36);
 
   return (
     <div className="space-y-6">
@@ -112,6 +129,23 @@ export default function Reports() {
         </div>
       )}
 
+      {monthlyTrend.length > 0 && (
+        <div className="bg-surface border border-border shadow-card rounded-xl p-5">
+          <h2 className="text-sm font-semibold text-ink-muted mb-3">Income vs expense, last 6 months</h2>
+          <ResponsiveContainer width="100%" height={220}>
+            <BarChart data={monthlyTrend} margin={{ left: -20, right: 10 }}>
+              <CartesianGrid vertical={false} stroke="#E2E8F0" />
+              <XAxis dataKey="label" tick={{ fontSize: 11, fill: "#94A3B8" }} axisLine={false} tickLine={false} />
+              <YAxis tickFormatter={shortMoney} tick={{ fontSize: 11, fill: "#94A3B8" }} axisLine={false} tickLine={false} />
+              <Tooltip formatter={(v) => money(v)} />
+              <Legend wrapperStyle={{ fontSize: 12 }} iconType="circle" iconSize={8} />
+              <Bar dataKey="income" name="Income" fill="#16A34A" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="expense" name="Expense" fill="#DC2626" radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+
       <div className="flex gap-1.5 overflow-x-auto pb-1">
         {PERIODS.map((p) => (
           <button
@@ -145,17 +179,25 @@ export default function Reports() {
 
       <div className="bg-surface border border-border shadow-card rounded-xl p-5">
         <h2 className="text-sm font-semibold text-ink-muted mb-3">Spending by category</h2>
-        <div className="divide-y divide-border">
-          {stats.byCategory.map(([name, total]) => (
-            <div key={name} className="flex justify-between py-2.5 text-sm">
-              <span className="font-medium">{name}</span>
-              <span className="font-bold tabular-nums">{money(total)}</span>
-            </div>
-          ))}
-          {stats.byCategory.length === 0 && (
-            <p className="text-sm text-ink-faint py-4 text-center">No data for this period.</p>
-          )}
-        </div>
+        {stats.byCategory.length > 0 ? (
+          <ResponsiveContainer width="100%" height={categoryChartHeight}>
+            <BarChart data={stats.byCategory} layout="vertical" margin={{ left: 10, right: 30 }}>
+              <XAxis type="number" tickFormatter={shortMoney} tick={{ fontSize: 11, fill: "#94A3B8" }} axisLine={false} tickLine={false} />
+              <YAxis
+                type="category"
+                dataKey="category"
+                width={90}
+                tick={{ fontSize: 12, fill: "#0F172A" }}
+                axisLine={false}
+                tickLine={false}
+              />
+              <Tooltip formatter={(v) => money(v)} cursor={{ fill: "#F6F7FB" }} />
+              <Bar dataKey="total" fill="#4F46E5" radius={[0, 4, 4, 0]} barSize={16} />
+            </BarChart>
+          </ResponsiveContainer>
+        ) : (
+          <p className="text-sm text-ink-faint py-4 text-center">No data for this period.</p>
+        )}
       </div>
     </div>
   );

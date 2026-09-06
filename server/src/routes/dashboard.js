@@ -59,4 +59,36 @@ router.get("/networth-history", async (req, res) => {
   res.json(points);
 });
 
+router.get("/monthly-trend", async (req, res) => {
+  const months = Math.min(24, Math.max(1, Number(req.query.months) || 6));
+  const userId = new mongoose.Types.ObjectId(req.userId);
+  const now = new Date();
+  const start = new Date(now.getFullYear(), now.getMonth() - months + 1, 1);
+
+  const rows = await Transaction.aggregate([
+    { $match: { user: userId, date: { $gte: start }, type: { $in: ["INCOME", "EXPENSE"] } } },
+    {
+      $group: {
+        _id: { year: { $year: "$date" }, month: { $month: "$date" }, type: "$type" },
+        total: { $sum: "$amount" },
+      },
+    },
+  ]);
+
+  const points = [];
+  for (let i = months - 1; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const find = (type) =>
+      rows.find((r) => r._id.year === d.getFullYear() && r._id.month === d.getMonth() + 1 && r._id.type === type)
+        ?.total || 0;
+    points.push({
+      label: d.toLocaleDateString("en-PK", { month: "short" }),
+      income: find("INCOME"),
+      expense: find("EXPENSE"),
+    });
+  }
+
+  res.json(points);
+});
+
 export default router;
