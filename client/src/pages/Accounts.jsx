@@ -16,6 +16,7 @@ import {
   ArchiveRestore,
   ArrowUpRight,
   ArrowDownLeft,
+  Check,
 } from "lucide-react";
 import api from "../api/client.js";
 import Spinner from "../components/Spinner.jsx";
@@ -351,6 +352,9 @@ export default function Accounts() {
   const [editingTx, setEditingTx] = useState(null);
   const [archivingId, setArchivingId] = useState(null);
   const [historyKey, setHistoryKey] = useState(0);
+  const [renamingId, setRenamingId] = useState(null);
+  const [renameValue, setRenameValue] = useState("");
+  const [renaming, setRenaming] = useState(false);
 
   async function load() {
     const [accountsRes, categoriesRes, peopleRes, closedRes] = await Promise.all([
@@ -378,9 +382,14 @@ export default function Accounts() {
 
   async function handleArchive(account, archived) {
     if (archived && account.balance !== 0) {
-      const ok = window.confirm(
-        `${account.name} still has a balance of ${money(account.balance)}. Closing it will remove that amount from your net worth — make sure you've moved the money out first (e.g. transfer it to a bank account). Close anyway?`
-      );
+      // Which way net worth would drift depends on whether this account is
+      // something owned (archiving hides an asset) or owed (archiving hides
+      // a debt, which is the more dangerous mistake — worth calling out).
+      const impact =
+        account.kind === "LIABILITY"
+          ? `You still owe ${money(account.balance)} on this. Closing it will make your net worth look ${money(account.balance)} higher than it really is, since that debt won't be subtracted anymore.`
+          : `This still holds ${money(account.balance)}. Closing it will remove that amount from your net worth, since it'll no longer be counted as something you own — make sure you've moved the money out first.`;
+      const ok = window.confirm(`${impact} Close ${account.name} anyway?`);
       if (!ok) return;
     } else if (!window.confirm(archived ? `Close ${account.name}?` : `Reopen ${account.name}?`)) {
       return;
@@ -392,6 +401,19 @@ export default function Accounts() {
       await load();
     } finally {
       setArchivingId(null);
+    }
+  }
+
+  async function handleRename(account) {
+    const value = renameValue.trim();
+    if (!value || value === account.name) return setRenamingId(null);
+    setRenaming(true);
+    try {
+      await api.patch(`/accounts/${account._id}`, { name: value });
+      setRenamingId(null);
+      await load();
+    } finally {
+      setRenaming(false);
     }
   }
 
@@ -518,14 +540,15 @@ export default function Accounts() {
             const isCardOpen = expandedCard === a._id;
             const isHistoryOpen = expandedId === a._id;
             const isArchiving = archivingId === a._id;
+            const isRenaming = renamingId === a._id;
             return (
               <div key={a._id} className="bg-surface border border-border shadow-card rounded-xl overflow-hidden">
                 <div
                   className="p-4 cursor-pointer"
                   role="button"
                   tabIndex={0}
-                  onClick={() => setExpandedId(isHistoryOpen ? null : a._id)}
-                  onKeyDown={(e) => e.key === "Enter" && setExpandedId(isHistoryOpen ? null : a._id)}
+                  onClick={() => !isRenaming && setExpandedId(isHistoryOpen ? null : a._id)}
+                  onKeyDown={(e) => !isRenaming && e.key === "Enter" && setExpandedId(isHistoryOpen ? null : a._id)}
                 >
                   <div className="flex items-center gap-3.5">
                     <div className="w-10 h-10 rounded-lg bg-accent-soft text-accent-ink flex items-center justify-center shrink-0">
@@ -533,7 +556,43 @@ export default function Accounts() {
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="text-xs text-ink-faint font-medium">{a.type.replace("_", " ")}</div>
-                      <div className="font-semibold truncate">{a.name}</div>
+                      {isRenaming ? (
+                        <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                          <input
+                            autoFocus
+                            value={renameValue}
+                            onChange={(e) => setRenameValue(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") handleRename(a);
+                              if (e.key === "Escape") setRenamingId(null);
+                            }}
+                            className="min-w-0 flex-1 border border-accent rounded px-1.5 py-0.5 text-sm font-semibold outline-none"
+                          />
+                          <button
+                            onClick={() => handleRename(a)}
+                            disabled={renaming}
+                            aria-label="Save name"
+                            className="text-accent-ink shrink-0 disabled:opacity-40"
+                          >
+                            {renaming ? <Spinner size={14} /> : <Check size={14} />}
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <div className="font-semibold truncate">{a.name}</div>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setRenamingId(a._id);
+                              setRenameValue(a.name);
+                            }}
+                            aria-label={`Rename ${a.name}`}
+                            className="text-ink-faint hover:text-accent-ink shrink-0"
+                          >
+                            <Pencil size={12} />
+                          </button>
+                        </div>
+                      )}
                     </div>
                     <div className={`text-lg font-bold tabular-nums shrink-0 ${a.kind === "LIABILITY" ? "text-bad" : "text-ink"}`}>
                       {money(a.balance)}

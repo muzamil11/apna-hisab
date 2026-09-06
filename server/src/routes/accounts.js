@@ -45,6 +45,19 @@ router.post("/", async (req, res) => {
   res.status(201).json(await Account.findById(account._id));
 });
 
+// Rename only — type/kind aren't editable since they'd change how the
+// polarity math already applied to past transactions should be read.
+router.patch("/:id", async (req, res) => {
+  const { name } = req.body;
+  const account = await Account.findOneAndUpdate(
+    { _id: req.params.id, user: req.userId },
+    { name },
+    { new: true }
+  );
+  if (!account) return res.status(404).json({ error: "Account not found" });
+  res.json(account);
+});
+
 router.get("/archived", async (req, res) => {
   const accounts = await Account.find({ user: req.userId, archived: true }).sort({ updatedAt: -1 });
   res.json(accounts);

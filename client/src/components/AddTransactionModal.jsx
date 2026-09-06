@@ -62,10 +62,15 @@ export default function AddTransactionModal({ accounts, categories, people, edit
             title,
             note,
             date,
-            fromAccount: fromAccount || undefined,
-            toAccount: toAccount || undefined,
+            // Only send fromAccount/toAccount when this type actually uses
+            // them — otherwise a value picked before an earlier type switch
+            // (now hidden, not cleared, so toggling back stays convenient)
+            // would silently move money through an account the user never
+            // saw or chose for this transaction.
+            fromAccount: type === "EXPENSE" || type === "TRANSFER" ? fromAccount || undefined : undefined,
+            toAccount: type === "INCOME" || type === "TRANSFER" ? toAccount || undefined : undefined,
             category: type !== "TRANSFER" ? category : undefined,
-            person: person || undefined,
+            person: type === "EXPENSE" ? person || undefined : undefined,
           };
       if (editingTx) {
         // Editing replays as delete-then-recreate so the old entry's ledger
@@ -100,7 +105,17 @@ export default function AddTransactionModal({ accounts, categories, people, edit
             <button
               key={t.key}
               type="button"
-              onClick={() => setType(t.key)}
+              onClick={() => {
+                // Category and person are direction/type-specific — carrying a
+                // stale pick across a type switch could silently attach the
+                // wrong-direction category, or tag an unrelated transaction
+                // with a person, since only fromAccount/toAccount visibility
+                // changes with type, not these values.
+                setType(t.key);
+                setCategory("");
+                setPerson("");
+                setWillBeRepaid(false);
+              }}
               className={`flex flex-col items-center gap-1.5 py-3 rounded-xl border text-xs font-semibold transition-colors ${
                 type === t.key ? toneClasses[t.tone] : "border-border text-ink-muted hover:border-ink-faint"
               }`}
