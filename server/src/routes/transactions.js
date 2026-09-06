@@ -19,7 +19,7 @@ async function assertOwnedAccounts(userId, ids) {
 }
 
 router.get("/", async (req, res) => {
-  const { from, to, limit = 200, skip = 0, person } = req.query;
+  const { from, to, limit = 200, skip = 0, person, account } = req.query;
   const query = { user: req.userId };
   if (from || to) {
     query.date = {};
@@ -27,6 +27,7 @@ router.get("/", async (req, res) => {
     if (to) query.date.$lte = new Date(to);
   }
   if (person) query.person = person;
+  if (account) query.$or = [{ fromAccount: account }, { toAccount: account }];
 
   const [transactions, total] = await Promise.all([
     Transaction.find(query)

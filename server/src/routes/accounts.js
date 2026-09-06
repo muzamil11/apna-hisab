@@ -45,10 +45,25 @@ router.post("/", async (req, res) => {
   res.status(201).json(await Account.findById(account._id));
 });
 
+router.get("/archived", async (req, res) => {
+  const accounts = await Account.find({ user: req.userId, archived: true }).sort({ updatedAt: -1 });
+  res.json(accounts);
+});
+
 router.patch("/:id/archive", async (req, res) => {
   const account = await Account.findOneAndUpdate(
     { _id: req.params.id, user: req.userId },
     { archived: true },
+    { new: true }
+  );
+  if (!account) return res.status(404).json({ error: "Account not found" });
+  res.json(account);
+});
+
+router.patch("/:id/unarchive", async (req, res) => {
+  const account = await Account.findOneAndUpdate(
+    { _id: req.params.id, user: req.userId },
+    { archived: false },
     { new: true }
   );
   if (!account) return res.status(404).json({ error: "Account not found" });

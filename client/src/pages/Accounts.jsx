@@ -1,7 +1,25 @@
 import { useEffect, useState } from "react";
-import { Landmark, Wallet, CreditCard, LineChart, PiggyBank, Building2, Target, AlertCircle, ChevronDown, X } from "lucide-react";
+import {
+  Landmark,
+  Wallet,
+  CreditCard,
+  LineChart,
+  PiggyBank,
+  Building2,
+  Target,
+  AlertCircle,
+  ChevronDown,
+  X,
+  Pencil,
+  Trash2,
+  Archive,
+  ArchiveRestore,
+  ArrowUpRight,
+  ArrowDownLeft,
+} from "lucide-react";
 import api from "../api/client.js";
 import Spinner from "../components/Spinner.jsx";
+import AddTransactionModal from "../components/AddTransactionModal.jsx";
 
 const money = (n) => `Rs ${Math.round(n).toLocaleString("en-PK")}`;
 const fmtDate = (d) => new Date(d).toLocaleDateString("en-PK", { day: "numeric", month: "short" });
@@ -190,6 +208,125 @@ function StatementHistory({ cardId }) {
   );
 }
 
+const PAGE_SIZE = 10;
+
+function AccountHistory({ account, onEdit, onChanged }) {
+  const [entries, setEntries] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [deletingId, setDeletingId] = useState(null);
+
+  function reload() {
+    setLoading(true);
+    return api
+      .get("/transactions", { params: { account: account._id, limit: PAGE_SIZE, skip: page * PAGE_SIZE } })
+      .then((res) => {
+        setEntries(res.data.transactions);
+        setTotal(res.data.total);
+      })
+      .finally(() => setLoading(false));
+  }
+
+  useEffect(() => {
+    reload();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [account._id, page]);
+
+  async function handleDelete(tx) {
+    if (!window.confirm(`Delete "${tx.title}" (${money(tx.amount)})? This can't be undone.`)) return;
+    setDeletingId(tx._id);
+    try {
+      await api.delete(`/transactions/${tx._id}`);
+      await reload();
+      onChanged();
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
+  return (
+    <div className="border-t border-border px-4 py-3 bg-canvas/50">
+      {loading && (
+        <div className="flex items-center justify-center py-4 text-ink-faint">
+          <Spinner size={18} />
+        </div>
+      )}
+      {!loading && entries.length === 0 && <p className="text-sm text-ink-faint py-2">No entries yet.</p>}
+      <div className="space-y-1">
+        {entries.map((tx) => {
+          const isIn = tx.toAccount?._id === account._id;
+          const isDeleting = deletingId === tx._id;
+          return (
+            <div key={tx._id} className="group flex items-center gap-3 py-1.5">
+              <div
+                className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${
+                  isIn ? "bg-good-soft text-good" : "bg-bad-soft text-bad"
+                }`}
+              >
+                {isIn ? <ArrowDownLeft size={14} strokeWidth={2.5} /> : <ArrowUpRight size={14} strokeWidth={2.5} />}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="text-sm font-medium truncate">{tx.title}</div>
+                <div className="text-xs text-ink-faint truncate">
+                  {fmtDateLong(tx.date)}
+                  {tx.category?.name && ` · ${tx.category.name}`}
+                  {tx.person?.name && ` · ${tx.person.name}`}
+                </div>
+              </div>
+              <span className={`font-bold tabular-nums text-sm shrink-0 ${isIn ? "text-good" : "text-bad"}`}>
+                {isIn ? "+" : "−"}
+                {money(tx.amount)}
+              </span>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  onClick={() => onEdit(tx)}
+                  disabled={isDeleting}
+                  aria-label="Edit entry"
+                  className="text-ink-faint hover:text-accent-ink disabled:opacity-40"
+                >
+                  <Pencil size={14} />
+                </button>
+                <button
+                  onClick={() => handleDelete(tx)}
+                  disabled={isDeleting}
+                  aria-label="Delete entry"
+                  className="text-ink-faint hover:text-bad disabled:opacity-40"
+                >
+                  {isDeleting ? <Spinner size={14} /> : <Trash2 size={14} />}
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between pt-3 mt-2 border-t border-border text-xs">
+          <button
+            disabled={page === 0}
+            onClick={() => setPage((p) => p - 1)}
+            className="px-2.5 py-1 rounded border border-border disabled:opacity-40 font-medium"
+          >
+            Previous
+          </button>
+          <span className="text-ink-faint">
+            Page {page + 1} of {totalPages}
+          </span>
+          <button
+            disabled={page >= totalPages - 1}
+            onClick={() => setPage((p) => p + 1)}
+            className="px-2.5 py-1 rounded border border-border disabled:opacity-40 font-medium"
+          >
+            Next
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Accounts() {
   const [accounts, setAccounts] = useState([]);
   const [netWorth, setNetWorth] = useState(0);
@@ -206,16 +343,57 @@ export default function Accounts() {
   const [payingCard, setPayingCard] = useState(null);
   const [contributingGoal, setContributingGoal] = useState(null);
   const [expandedCard, setExpandedCard] = useState(null);
+  const [categories, setCategories] = useState([]);
+  const [people, setPeople] = useState([]);
+  const [closedAccounts, setClosedAccounts] = useState([]);
+  const [showClosed, setShowClosed] = useState(false);
+  const [expandedId, setExpandedId] = useState(null);
+  const [editingTx, setEditingTx] = useState(null);
+  const [archivingId, setArchivingId] = useState(null);
+  const [historyKey, setHistoryKey] = useState(0);
 
   async function load() {
-    const { data } = await api.get("/accounts");
-    setAccounts(data.accounts.filter((a) => !["RECEIVABLE", "PAYABLE"].includes(a.type)));
-    setNetWorth(data.netWorth);
+    const [accountsRes, categoriesRes, peopleRes, closedRes] = await Promise.all([
+      api.get("/accounts"),
+      api.get("/categories"),
+      api.get("/people"),
+      api.get("/accounts/archived"),
+    ]);
+    setAccounts(accountsRes.data.accounts.filter((a) => !["RECEIVABLE", "PAYABLE"].includes(a.type)));
+    setNetWorth(accountsRes.data.netWorth);
+    setCategories(categoriesRes.data);
+    setPeople(
+      peopleRes.data.map((p) => ({
+        _id: p._id,
+        name: p.name,
+        receivableId: p.accounts.find((a) => a.type === "RECEIVABLE")?._id,
+      }))
+    );
+    setClosedAccounts(closedRes.data.filter((a) => !["RECEIVABLE", "PAYABLE"].includes(a.type)));
   }
 
   useEffect(() => {
     load().finally(() => setLoading(false));
   }, []);
+
+  async function handleArchive(account, archived) {
+    if (archived && account.balance !== 0) {
+      const ok = window.confirm(
+        `${account.name} still has a balance of ${money(account.balance)}. Closing it will remove that amount from your net worth — make sure you've moved the money out first (e.g. transfer it to a bank account). Close anyway?`
+      );
+      if (!ok) return;
+    } else if (!window.confirm(archived ? `Close ${account.name}?` : `Reopen ${account.name}?`)) {
+      return;
+    }
+    setArchivingId(account._id);
+    try {
+      await api.patch(`/accounts/${account._id}/${archived ? "archive" : "unarchive"}`);
+      setExpandedId(null);
+      await load();
+    } finally {
+      setArchivingId(null);
+    }
+  }
 
   async function handleAdd(e) {
     e.preventDefault();
@@ -338,23 +516,50 @@ export default function Accounts() {
             const goalPct =
               a.type === "GOAL" && a.meta?.targetAmount ? Math.min(100, (a.balance / a.meta.targetAmount) * 100) : null;
             const isCardOpen = expandedCard === a._id;
+            const isHistoryOpen = expandedId === a._id;
+            const isArchiving = archivingId === a._id;
             return (
-              <div key={a._id} className="bg-surface border border-border shadow-card rounded-xl p-4">
-                <div className="flex items-center gap-3.5">
-                  <div className="w-10 h-10 rounded-lg bg-accent-soft text-accent-ink flex items-center justify-center shrink-0">
-                    <Icon size={18} strokeWidth={2} />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="text-xs text-ink-faint font-medium">{a.type.replace("_", " ")}</div>
-                    <div className="font-semibold truncate">{a.name}</div>
-                  </div>
-                  <div className={`text-lg font-bold tabular-nums shrink-0 ${a.kind === "LIABILITY" ? "text-bad" : "text-ink"}`}>
-                    {money(a.balance)}
+              <div key={a._id} className="bg-surface border border-border shadow-card rounded-xl overflow-hidden">
+                <div
+                  className="p-4 cursor-pointer"
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => setExpandedId(isHistoryOpen ? null : a._id)}
+                  onKeyDown={(e) => e.key === "Enter" && setExpandedId(isHistoryOpen ? null : a._id)}
+                >
+                  <div className="flex items-center gap-3.5">
+                    <div className="w-10 h-10 rounded-lg bg-accent-soft text-accent-ink flex items-center justify-center shrink-0">
+                      <Icon size={18} strokeWidth={2} />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-xs text-ink-faint font-medium">{a.type.replace("_", " ")}</div>
+                      <div className="font-semibold truncate">{a.name}</div>
+                    </div>
+                    <div className={`text-lg font-bold tabular-nums shrink-0 ${a.kind === "LIABILITY" ? "text-bad" : "text-ink"}`}>
+                      {money(a.balance)}
+                    </div>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleArchive(a, true);
+                      }}
+                      disabled={isArchiving}
+                      aria-label={`Close ${a.name}`}
+                      title="Close this account"
+                      className="text-ink-faint hover:text-bad disabled:opacity-40 shrink-0"
+                    >
+                      {isArchiving ? <Spinner size={15} /> : <Archive size={15} />}
+                    </button>
+                    <ChevronDown
+                      size={18}
+                      aria-hidden="true"
+                      className={`text-ink-faint transition-transform shrink-0 ${isHistoryOpen ? "rotate-180" : ""}`}
+                    />
                   </div>
                 </div>
 
                 {goalPct !== null && (
-                  <div className="mt-3 pt-3 border-t border-border space-y-2">
+                  <div className="px-4 pb-4 -mt-1 pt-3 border-t border-border space-y-2">
                     <div className="h-2 rounded-full bg-canvas overflow-hidden">
                       <div className="h-full bg-accent rounded-full transition-all" style={{ width: `${goalPct}%` }} />
                     </div>
@@ -365,7 +570,10 @@ export default function Accounts() {
                       {a.meta.targetDate && <span>by {fmtDateLong(a.meta.targetDate)}</span>}
                     </div>
                     <button
-                      onClick={() => setContributingGoal(a)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setContributingGoal(a);
+                      }}
                       className="w-full text-sm font-semibold text-accent-ink bg-accent-soft hover:bg-accent-soft/70 rounded-lg py-2 transition-colors"
                     >
                       Add money
@@ -436,11 +644,84 @@ export default function Accounts() {
                     )}
                   </div>
                 )}
+
+                {isHistoryOpen && (
+                  <AccountHistory
+                    key={historyKey}
+                    account={a}
+                    onEdit={(tx) => setEditingTx(tx)}
+                    onChanged={load}
+                  />
+                )}
               </div>
             );
           })}
           {accounts.length === 0 && (
             <p className="text-sm text-ink-faint py-4 text-center col-span-2">No accounts yet — add your first one above.</p>
+          )}
+        </div>
+      )}
+
+      {!loading && (
+        <div className="bg-surface border border-border shadow-card rounded-xl overflow-hidden">
+          <button
+            onClick={() => setShowClosed((s) => !s)}
+            className="w-full flex items-center justify-between px-4 py-3.5 text-sm font-semibold text-ink-muted"
+          >
+            <span>Closed accounts ({closedAccounts.length})</span>
+            <ChevronDown size={16} className={`transition-transform ${showClosed ? "rotate-180" : ""}`} />
+          </button>
+          {showClosed && (
+            <div className="border-t border-border divide-y divide-border">
+              {closedAccounts.length === 0 && (
+                <p className="text-sm text-ink-faint text-center py-4">No closed accounts.</p>
+              )}
+              {closedAccounts.map((a) => {
+                const Icon = iconFor(a.type);
+                const isHistoryOpen = expandedId === a._id;
+                const isArchiving = archivingId === a._id;
+                return (
+                  <div key={a._id}>
+                    <div
+                      className="p-4 cursor-pointer flex items-center gap-3.5"
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => setExpandedId(isHistoryOpen ? null : a._id)}
+                      onKeyDown={(e) => e.key === "Enter" && setExpandedId(isHistoryOpen ? null : a._id)}
+                    >
+                      <div className="w-10 h-10 rounded-lg bg-canvas text-ink-faint flex items-center justify-center shrink-0">
+                        <Icon size={18} strokeWidth={2} />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-xs text-ink-faint font-medium">{a.type.replace("_", " ")}</div>
+                        <div className="font-semibold truncate text-ink-muted">{a.name}</div>
+                      </div>
+                      <div className="text-lg font-bold tabular-nums shrink-0 text-ink-faint">{money(a.balance)}</div>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleArchive(a, false);
+                        }}
+                        disabled={isArchiving}
+                        aria-label={`Reopen ${a.name}`}
+                        title="Reopen this account"
+                        className="text-ink-faint hover:text-accent-ink disabled:opacity-40 shrink-0"
+                      >
+                        {isArchiving ? <Spinner size={15} /> : <ArchiveRestore size={15} />}
+                      </button>
+                      <ChevronDown
+                        size={18}
+                        aria-hidden="true"
+                        className={`text-ink-faint transition-transform shrink-0 ${isHistoryOpen ? "rotate-180" : ""}`}
+                      />
+                    </div>
+                    {isHistoryOpen && (
+                      <AccountHistory key={historyKey} account={a} onEdit={(tx) => setEditingTx(tx)} onChanged={load} />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           )}
         </div>
       )}
@@ -454,6 +735,20 @@ export default function Accounts() {
           cashAccounts={cashAccounts}
           onClose={() => setContributingGoal(null)}
           onDone={load}
+        />
+      )}
+
+      {editingTx && (
+        <AddTransactionModal
+          accounts={[...accounts, ...closedAccounts]}
+          categories={categories}
+          people={people}
+          editingTx={editingTx}
+          onClose={() => setEditingTx(null)}
+          onCreated={() => {
+            load();
+            setHistoryKey((k) => k + 1);
+          }}
         />
       )}
     </div>
