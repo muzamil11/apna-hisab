@@ -426,6 +426,7 @@ export default function Udhar() {
             {people.map((p) => {
               const receivable = p.accounts.find((a) => a.type === "RECEIVABLE");
               const payable = p.accounts.find((a) => a.type === "PAYABLE");
+              const net = (receivable?.balance || 0) - (payable?.balance || 0);
               const isOpen = expanded === p._id;
               const isRemoving = removingId === p._id;
               return (
@@ -477,6 +478,17 @@ export default function Udhar() {
                         <div className="font-bold text-bad tabular-nums">{money(payable?.balance || 0)}</div>
                       </div>
                     </div>
+                    {receivable?.balance > 0 && payable?.balance > 0 && (
+                      <div
+                        className={`mt-3 pt-3 border-t border-border text-sm font-semibold ${net === 0 ? "text-ink-muted" : net > 0 ? "text-good" : "text-bad"}`}
+                      >
+                        {net === 0
+                          ? "Net: settled up"
+                          : net > 0
+                            ? `Net: ${p.name} owes you ${money(net)}`
+                            : `Net: You owe ${p.name} ${money(Math.abs(net))}`}
+                      </div>
+                    )}
                   </div>
                   {isOpen && (
                     <PersonHistory
